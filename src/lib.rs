@@ -65,6 +65,8 @@ pub enum Error {
     Overflow,
     /// String parsing
     ParseStr,
+    /// List parsing
+    ParseList,
 }
 
 pub struct BenDecoder {
@@ -124,7 +126,11 @@ impl BenDecoder {
                     count += 1;
                     self.pos += 1;
                     if self.tok_super >= 0 {
-                        tokens[self.tok_super as usize].size += 1;
+                        let t = &mut tokens[self.tok_super as usize];
+                        if t.kind == TokenKind::Dict {
+                            return Err(Error::ParseList);
+                        }
+                        t.size += 1;
                     }
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     tokens[i] = Token::new(TokenKind::List, self.pos as isize, -1);
@@ -164,10 +170,33 @@ impl BenDecoder {
                     }
                 }
                 b'e' => {
-                    if self.tok_super >= 0 {
-                        tokens[self.tok_super as usize].end = self.pos as isize;
+                    let mut i = (self.tok_next - 1) as isize;
+                    while i >= 0 {
+                        let token = &mut tokens[i as usize];
+                        if token.start >= 0 && token.end < 0 {
+                            self.tok_super = -1;
+                            token.end = self.pos as isize;
+                            break;
+                        } else {
+                            i -= 1
+                        }
                     }
-                    break;
+
+                    // Error if unmatched closing bracket
+                    if i == -1 {
+                        return Err(Error::Invalid);
+                    }
+
+                    while i >= 0 {
+                        let token = &mut tokens[i as usize];
+                        if token.start >= 0 && token.end < 0 {
+                            self.tok_super = i;
+                            break;
+                        } else {
+                            i -= 1
+                        }
+                    }
+                    self.pos += 1;
                 }
                 _ => {
                     // Unexpected char
@@ -382,6 +411,21 @@ mod tests {
                 Token::new(TokenKind::ByteStr, 6, 8),
                 Token::new(TokenKind::ByteStr, 10, 13),
                 Token::new(TokenKind::ByteStr, 15, 19)
+            ],
+            &tokens
+        );
+    }
+
+    #[test]
+    fn list_nested() {
+        let s = b"lllleeee";
+        let tokens = parse!(s, 4).unwrap();
+        assert_eq!(
+            &[
+                Token::with_size(TokenKind::List, 1, 7, 1),
+                Token::with_size(TokenKind::List, 2, 6, 1),
+                Token::with_size(TokenKind::List, 3, 5, 1),
+                Token::with_size(TokenKind::List, 4, 4, 0),
             ],
             &tokens
         );
