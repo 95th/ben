@@ -71,16 +71,16 @@ pub enum Error {
 /// Bencode Decoder
 pub struct BenDecoder {
     pos: usize,
-    next: usize,
-    parent: isize,
+    tok_next: usize,
+    tok_super: isize,
 }
 
 impl Default for BenDecoder {
     fn default() -> Self {
         Self {
             pos: 0,
-            next: 0,
-            parent: -1,
+            tok_next: 0,
+            tok_super: -1,
         }
     }
 }
@@ -98,7 +98,7 @@ impl BenDecoder {
     ///
     /// Returns number of tokens parsed.
     pub fn parse(&mut self, buf: &[u8], tokens: &mut [Token]) -> Result<usize, Error> {
-        let mut count = self.next;
+        let mut count = self.tok_next;
         while self.pos < buf.len() {
             let c = buf[self.pos];
             match c {
@@ -125,7 +125,7 @@ impl BenDecoder {
                     self.update_super(tokens, TokenKind::List)?;
                     let token = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     *token = Token::new(TokenKind::List, self.pos as isize, -1);
-                    self.parent = self.next as isize - 1;
+                    self.tok_super = self.tok_next as isize - 1;
                 }
                 b'd' => {
                     count += 1;
@@ -133,7 +133,7 @@ impl BenDecoder {
                     self.update_super(tokens, TokenKind::Dict)?;
                     let token = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     *token = Token::new(TokenKind::Dict, self.pos as isize, -1);
-                    self.parent = self.next as isize - 1;
+                    self.tok_super = self.tok_next as isize - 1;
                 }
                 b'0'..=b'9' => {
                     count += 1;
@@ -141,11 +141,11 @@ impl BenDecoder {
                     self.update_super(tokens, TokenKind::ByteStr)?;
                 }
                 b'e' => {
-                    let mut i = (self.next - 1) as isize;
+                    let mut i = (self.tok_next - 1) as isize;
                     while i >= 0 {
                         let token = &mut tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
-                            self.parent = -1;
+                            self.tok_super = -1;
                             token.end = self.pos as isize;
                             break;
                         } else {
@@ -161,7 +161,7 @@ impl BenDecoder {
                     while i >= 0 {
                         let token = &mut tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
-                            self.parent = i;
+                            self.tok_super = i;
                             break;
                         } else {
                             i -= 1
@@ -175,7 +175,7 @@ impl BenDecoder {
                 }
             }
         }
-        for i in (0..self.next).rev() {
+        for i in (0..self.tok_next).rev() {
             // Unclosed object
             if tokens[i].start >= 0 && tokens[i].end < 0 {
                 return Err(Error::Incomplete);
@@ -185,24 +185,24 @@ impl BenDecoder {
     }
 
     fn update_super(&mut self, tokens: &mut [Token], my_kind: TokenKind) -> Result<(), Error> {
-        if self.parent >= 0 {
-            let t = &mut tokens[self.parent as usize];
+        if self.tok_super >= 0 {
+            let t = &mut tokens[self.tok_super as usize];
             t.children += 1;
             match t.kind {
                 TokenKind::Dict => {
                     if let TokenKind::ByteStr = my_kind {
-                        self.parent = self.next as isize - 1;
+                        self.tok_super = self.tok_next as isize - 1;
                     } else {
                         // Can't have key other than byte string
                         return Err(Error::Invalid);
                     }
                 }
                 TokenKind::ByteStr => {
-                    for i in (0..self.next).rev() {
+                    for i in (0..self.tok_next).rev() {
                         let t = &tokens[i as usize];
                         if let TokenKind::Dict = t.kind {
                             if t.start >= 0 && t.end < 0 {
-                                self.parent = i as isize;
+                                self.tok_super = i as isize;
                                 break;
                             }
                         }
@@ -301,11 +301,11 @@ impl BenDecoder {
 
     /// Returns the next unused token from the slice.
     fn alloc_token<'a>(&mut self, tokens: &'a mut [Token]) -> Option<&'a mut Token> {
-        if self.next >= tokens.len() {
+        if self.tok_next >= tokens.len() {
             return None;
         }
-        let token = &mut tokens[self.next as usize];
-        self.next += 1;
+        let token = &mut tokens[self.tok_next as usize];
+        self.tok_next += 1;
         Some(token)
     }
 }
