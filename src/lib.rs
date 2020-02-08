@@ -104,9 +104,7 @@ impl BenDecoder {
             match c {
                 b'i' => {
                     count += 1;
-                    if self.tok_super >= 0 {
-                        tokens[self.tok_super as usize].size += 1;
-                    }
+                    self.update_super(tokens, TokenKind::Int)?;
                     self.pos += 1;
                     let start = self.pos;
                     self.parse_int(buf, b'e')?;
@@ -125,13 +123,7 @@ impl BenDecoder {
                 b'l' => {
                     count += 1;
                     self.pos += 1;
-                    if self.tok_super >= 0 {
-                        let t = &mut tokens[self.tok_super as usize];
-                        if t.kind == TokenKind::Dict {
-                            return Err(Error::ParseList);
-                        }
-                        t.size += 1;
-                    }
+                    self.update_super(tokens, TokenKind::List)?;
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     tokens[i] = Token::new(TokenKind::List, self.pos as isize, -1);
                     self.tok_super = self.tok_next as isize - 1;
@@ -139,9 +131,7 @@ impl BenDecoder {
                 b'd' => {
                     count += 1;
                     self.pos += 1;
-                    if self.tok_super >= 0 {
-                        tokens[self.tok_super as usize].size += 1;
-                    }
+                    self.update_super(tokens, TokenKind::Dict)?;
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     tokens[i] = Token::new(TokenKind::Dict, self.pos as isize, -1);
                     self.tok_super = self.tok_next as isize - 1;
@@ -149,25 +139,7 @@ impl BenDecoder {
                 b'0'..=b'9' => {
                     count += 1;
                     self.parse_string(buf, tokens)?;
-                    if self.tok_super >= 0 {
-                        let t = &mut tokens[self.tok_super as usize];
-                        t.size += 1;
-                        match t.kind {
-                            TokenKind::Dict => self.tok_super = self.tok_next as isize - 1,
-                            TokenKind::ByteStr => {
-                                for i in (0..self.tok_next).rev() {
-                                    let t = &tokens[i as usize];
-                                    if let TokenKind::Dict = t.kind {
-                                        if t.start >= 0 && t.end < 0 {
-                                            self.tok_super = i as isize;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
+                    self.update_super(tokens, TokenKind::ByteStr)?;
                 }
                 b'e' => {
                     let mut i = (self.tok_next - 1) as isize;
@@ -211,6 +183,36 @@ impl BenDecoder {
             }
         }
         Ok(count)
+    }
+
+    fn update_super(&mut self, tokens: &mut [Token], my_kind: TokenKind) -> Result<(), Error> {
+        if self.tok_super >= 0 {
+            let t = &mut tokens[self.tok_super as usize];
+            t.size += 1;
+            match t.kind {
+                TokenKind::Dict => {
+                    if let TokenKind::ByteStr = my_kind {
+                        self.tok_super = self.tok_next as isize - 1;
+                    } else {
+                        // Can't have key other than byte string
+                        return Err(Error::Invalid);
+                    }
+                }
+                TokenKind::ByteStr => {
+                    for i in (0..self.tok_next).rev() {
+                        let t = &tokens[i as usize];
+                        if let TokenKind::Dict = t.kind {
+                            if t.start >= 0 && t.end < 0 {
+                                self.tok_super = i as isize;
+                                break;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     /// Parse bencode int.
@@ -322,7 +324,7 @@ mod tests {
             let mut v = [Token::default(); $len];
             let mut parser = BenDecoder::new();
             parser.parse($buf, &mut v).map(|parsed| {
-                assert_eq!($len, parsed as usize);
+                assert_eq!($len, parsed);
                 v
             })
         }};
@@ -381,6 +383,24 @@ mod tests {
                 Token::with_size(TokenKind::ByteStr, 6, 8, 0),
                 Token::with_size(TokenKind::ByteStr, 10, 13, 1),
                 Token::with_size(TokenKind::ByteStr, 15, 19, 0)
+            ],
+            &tokens
+        );
+    }
+
+    #[test]
+    fn dict_mixed_values() {
+        let s = b"d1:a1:b1:ci1e1:x1:ye";
+        let tokens = parse!(s, 7).unwrap();
+        assert_eq!(
+            &[
+                Token::with_size(TokenKind::Dict, 1, 19, 3),
+                Token::with_size(TokenKind::ByteStr, 3, 4, 1),
+                Token::with_size(TokenKind::ByteStr, 6, 7, 0),
+                Token::with_size(TokenKind::ByteStr, 9, 10, 1),
+                Token::with_size(TokenKind::Int, 11, 12, 0),
+                Token::with_size(TokenKind::ByteStr, 15, 16, 1),
+                Token::with_size(TokenKind::ByteStr, 18, 19, 0)
             ],
             &tokens
         );
