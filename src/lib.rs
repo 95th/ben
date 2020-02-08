@@ -54,9 +54,9 @@ impl Token {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
-    /// The string is not a full JSON packet, more bytes expected
-    Part,
-    /// Invalid character inside JSON string
+    /// The string is not a full Bencode packet, more bytes expected
+    Incomplete,
+    /// Invalid character inside Bencode string
     Invalid,
     /// Not enough tokens were provided
     NoMemory,
@@ -178,7 +178,7 @@ impl BenDecoder {
         for i in (0..self.next).rev() {
             // Unclosed object
             if tokens[i].start >= 0 && tokens[i].end < 0 {
-                return Err(Error::Part);
+                return Err(Error::Incomplete);
             }
         }
         Ok(count)
@@ -268,10 +268,10 @@ impl BenDecoder {
     }
 
     /// Fills next token with bencode string.
-    fn parse_string(&mut self, js: &[u8], tokens: &mut [Token]) -> Result<(), Error> {
+    fn parse_string(&mut self, buf: &[u8], tokens: &mut [Token]) -> Result<(), Error> {
         let start = self.pos;
 
-        let len = self.parse_int(js, b':')?;
+        let len = self.parse_int(buf, b':')?;
         self.pos += 1;
 
         if len <= 0 {
@@ -280,7 +280,7 @@ impl BenDecoder {
         }
 
         let len = len as usize;
-        if self.pos + len > js.len() {
+        if self.pos + len > buf.len() {
             self.pos = start;
             return Err(Error::ParseStr);
         }
@@ -299,7 +299,7 @@ impl BenDecoder {
         }
     }
 
-    /// Allocates a fresh unused token from the token pool.
+    /// Returns the next unused token from the slice.
     fn alloc_token<'a>(&mut self, tokens: &'a mut [Token]) -> Option<&'a mut Token> {
         if self.next >= tokens.len() {
             return None;
@@ -343,7 +343,7 @@ mod tests {
     fn parse_string_too_long() {
         let s = b"3:abcd";
         let err = parse!(s, 2).unwrap_err();
-        assert_eq!(Error::Part, err);
+        assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
@@ -364,7 +364,7 @@ mod tests {
     fn unclosed_dict() {
         let s = b"d";
         let err = parse!(s, 1).unwrap_err();
-        assert_eq!(Error::Part, err);
+        assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
@@ -418,7 +418,7 @@ mod tests {
     fn unclosed_list() {
         let s = b"l";
         let err = parse!(s, 1).unwrap_err();
-        assert_eq!(Error::Part, err);
+        assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
