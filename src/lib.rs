@@ -11,7 +11,7 @@ pub struct Token {
     pub kind: TokenKind,
     pub start: isize,
     pub end: isize,
-    pub size: usize,
+    pub children: usize,
 }
 
 impl Token {
@@ -19,12 +19,12 @@ impl Token {
         Self::with_size(kind, start, end, 0)
     }
 
-    pub fn with_size(kind: TokenKind, start: isize, end: isize, size: usize) -> Self {
+    pub fn with_size(kind: TokenKind, start: isize, end: isize, children: usize) -> Self {
         Self {
             kind,
             start,
             end,
-            size,
+            children,
         }
     }
 
@@ -69,18 +69,19 @@ pub enum Error {
     ParseList,
 }
 
+/// Bencode Decoder
 pub struct BenDecoder {
     pos: usize,
-    tok_next: usize,
-    tok_super: isize,
+    next: usize,
+    parent: isize,
 }
 
 impl Default for BenDecoder {
     fn default() -> Self {
         Self {
             pos: 0,
-            tok_next: 0,
-            tok_super: -1,
+            next: 0,
+            parent: -1,
         }
     }
 }
@@ -98,7 +99,7 @@ impl BenDecoder {
     ///
     /// Returns number of tokens parsed.
     pub fn parse(&mut self, buf: &[u8], tokens: &mut [Token]) -> Result<usize, Error> {
-        let mut count = self.tok_next;
+        let mut count = self.next;
         while self.pos < buf.len() {
             let c = buf[self.pos];
             match c {
@@ -126,7 +127,7 @@ impl BenDecoder {
                     self.update_super(tokens, TokenKind::List)?;
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     tokens[i] = Token::new(TokenKind::List, self.pos as isize, -1);
-                    self.tok_super = self.tok_next as isize - 1;
+                    self.parent = self.next as isize - 1;
                 }
                 b'd' => {
                     count += 1;
@@ -134,7 +135,7 @@ impl BenDecoder {
                     self.update_super(tokens, TokenKind::Dict)?;
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     tokens[i] = Token::new(TokenKind::Dict, self.pos as isize, -1);
-                    self.tok_super = self.tok_next as isize - 1;
+                    self.parent = self.next as isize - 1;
                 }
                 b'0'..=b'9' => {
                     count += 1;
@@ -142,11 +143,11 @@ impl BenDecoder {
                     self.update_super(tokens, TokenKind::ByteStr)?;
                 }
                 b'e' => {
-                    let mut i = (self.tok_next - 1) as isize;
+                    let mut i = (self.next - 1) as isize;
                     while i >= 0 {
                         let token = &mut tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
-                            self.tok_super = -1;
+                            self.parent = -1;
                             token.end = self.pos as isize;
                             break;
                         } else {
@@ -162,7 +163,7 @@ impl BenDecoder {
                     while i >= 0 {
                         let token = &mut tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
-                            self.tok_super = i;
+                            self.parent = i;
                             break;
                         } else {
                             i -= 1
@@ -176,7 +177,7 @@ impl BenDecoder {
                 }
             }
         }
-        for i in (0..self.tok_next).rev() {
+        for i in (0..self.next).rev() {
             // Unclosed object
             if tokens[i].start >= 0 && tokens[i].end < 0 {
                 return Err(Error::Part);
@@ -186,24 +187,24 @@ impl BenDecoder {
     }
 
     fn update_super(&mut self, tokens: &mut [Token], my_kind: TokenKind) -> Result<(), Error> {
-        if self.tok_super >= 0 {
-            let t = &mut tokens[self.tok_super as usize];
-            t.size += 1;
+        if self.parent >= 0 {
+            let t = &mut tokens[self.parent as usize];
+            t.children += 1;
             match t.kind {
                 TokenKind::Dict => {
                     if let TokenKind::ByteStr = my_kind {
-                        self.tok_super = self.tok_next as isize - 1;
+                        self.parent = self.next as isize - 1;
                     } else {
                         // Can't have key other than byte string
                         return Err(Error::Invalid);
                     }
                 }
                 TokenKind::ByteStr => {
-                    for i in (0..self.tok_next).rev() {
+                    for i in (0..self.next).rev() {
                         let t = &tokens[i as usize];
                         if let TokenKind::Dict = t.kind {
                             if t.start >= 0 && t.end < 0 {
-                                self.tok_super = i as isize;
+                                self.parent = i as isize;
                                 break;
                             }
                         }
@@ -302,15 +303,15 @@ impl BenDecoder {
 
     /// Allocates a fresh unused token from the token pool.
     fn alloc_token(&mut self, tokens: &mut [Token]) -> Option<usize> {
-        if self.tok_next >= tokens.len() {
+        if self.next >= tokens.len() {
             return None;
         }
-        let idx = self.tok_next as usize;
-        self.tok_next += 1;
+        let idx = self.next as usize;
+        self.next += 1;
         let tok = &mut tokens[idx];
         tok.start = -1;
         tok.end = -1;
-        tok.size = 0;
+        tok.children = 0;
         Some(idx)
     }
 }
@@ -390,17 +391,23 @@ mod tests {
 
     #[test]
     fn dict_mixed_values() {
-        let s = b"d1:a1:b1:ci1e1:x1:ye";
-        let tokens = parse!(s, 7).unwrap();
+        let s = b"d1:a1:b1:ci1e1:x1:y1:dde1:fle1:g1:he";
+        let tokens = parse!(s, 13).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::Dict, 1, 19, 3),
+                Token::with_size(TokenKind::Dict, 1, 35, 6),
                 Token::with_size(TokenKind::ByteStr, 3, 4, 1),
                 Token::with_size(TokenKind::ByteStr, 6, 7, 0),
                 Token::with_size(TokenKind::ByteStr, 9, 10, 1),
                 Token::with_size(TokenKind::Int, 11, 12, 0),
                 Token::with_size(TokenKind::ByteStr, 15, 16, 1),
-                Token::with_size(TokenKind::ByteStr, 18, 19, 0)
+                Token::with_size(TokenKind::ByteStr, 18, 19, 0),
+                Token::with_size(TokenKind::ByteStr, 21, 22, 1),
+                Token::with_size(TokenKind::Dict, 23, 23, 0),
+                Token::with_size(TokenKind::ByteStr, 26, 27, 1),
+                Token::with_size(TokenKind::List, 28, 28, 0),
+                Token::with_size(TokenKind::ByteStr, 31, 32, 1),
+                Token::with_size(TokenKind::ByteStr, 34, 35, 0)
             ],
             &tokens
         );
