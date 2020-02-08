@@ -1,9 +1,9 @@
 use ben::*;
 
 fn main() {
-    let s = br#"d1:a1:be"#;
+    let s = br#"3:abcd"#;
     let p = &mut BenDecoder::new();
-    let tokens = &mut [Token::default(); 3];
+    let tokens = &mut [Token::default(); 2];
     let n = p.parse(s, tokens).unwrap();
     println!("{:?}", &tokens[..n]);
 }

@@ -29,7 +29,7 @@ impl Token {
     }
 
     pub fn as_range(&self) -> Option<Range<usize>> {
-        if self.start != -1 && self.end != -1 {
+        if self.start >= 0 && self.end >= 0 {
             Some(self.start as usize..self.end as usize)
         } else {
             None
@@ -150,9 +150,8 @@ impl BenDecoder {
                 b'e' => {
                     if self.tok_super >= 0 {
                         tokens[self.tok_super as usize].end = self.pos as isize;
-                    } else {
-                        break;
                     }
+                    break;
                 }
                 _ => {
                     // Unexpected char
@@ -162,7 +161,7 @@ impl BenDecoder {
         }
         for i in (0..self.tok_next).rev() {
             // Unclosed object
-            if tokens[i].start != -1 && tokens[i].end == -1 {
+            if tokens[i].start >= 0 && tokens[i].end < 0 {
                 return Err(Error::Part);
             }
         }
@@ -266,91 +265,39 @@ impl BenDecoder {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     macro_rules! parse {
-//         ($buf: expr, $len: expr) => {{
-//             let mut v = [Token::default(); $len];
-//             let mut parser = JsonParser::new();
-//             parser.parse($buf, &mut v).map(|parsed| {
-//                 assert_eq!($len, parsed as usize);
-//                 v
-//             })
-//         }};
-//     }
+    macro_rules! parse {
+        ($buf: expr, $len: expr) => {{
+            let mut v = [Token::default(); $len];
+            let mut parser = BenDecoder::new();
+            parser.parse($buf, &mut v).map(|parsed| {
+                assert_eq!($len, parsed as usize);
+                v
+            })
+        }};
+    }
 
-//     #[test]
-//     fn parse_int() {
-//         let s = b"1234";
-//         let tokens = parse!(s, 1).unwrap();
-//         assert_eq!(
-//             &[Token::new(TokenKind::Primitive, Some(0), Some(4))],
-//             &tokens
-//         );
-//     }
+    #[test]
+    fn parse_int() {
+        let s = b"i12e";
+        let tokens = parse!(s, 1).unwrap();
+        assert_eq!(&[Token::new(TokenKind::Int, 1, 3)], &tokens);
+    }
 
-//     #[test]
-//     fn parse_int_negative() {
-//         let s = b"-1234";
-//         let tokens = parse!(s, 1).unwrap();
-//         assert_eq!(
-//             &[Token::new(TokenKind::Primitive, Some(0), Some(5))],
-//             &tokens
-//         );
-//     }
+    #[test]
+    fn parse_string() {
+        let s = b"3:abc";
+        let tokens = parse!(s, 1).unwrap();
+        assert_eq!(&[Token::new(TokenKind::ByteStr, 2, 5)], &tokens);
+    }
 
-//     #[test]
-//     fn parse_int_invalid() {
-//         let s = b"abc1234";
-//         let err = parse!(s, 1).unwrap_err();
-//         assert_eq!(Error::Invalid, err);
-//     }
-
-//     #[test]
-//     fn parse_string() {
-//         let s = br#""abcd""#;
-//         let tokens = parse!(s, 1).unwrap();
-//         assert_eq!(&[Token::new(TokenKind::Str, Some(1), Some(5))], &tokens);
-//     }
-
-//     #[test]
-//     fn parse_object() {
-//         let s = br#"{"a": "b", "c": 100}"#;
-//         let tokens = parse!(s, 5).unwrap();
-//         assert_eq!(
-//             &[
-//                 Token::with_size(TokenKind::Object, Some(0), Some(20), 2),
-//                 Token::with_size(TokenKind::Str, Some(2), Some(3), 1),
-//                 Token::with_size(TokenKind::Str, Some(7), Some(8), 0),
-//                 Token::with_size(TokenKind::Str, Some(12), Some(13), 1),
-//                 Token::with_size(TokenKind::Primitive, Some(16), Some(19), 0)
-//             ],
-//             &tokens
-//         );
-//     }
-
-//     #[test]
-//     fn parse_array() {
-//         let s = br#"["a", "b", "c", 100]"#;
-//         let tokens = parse!(s, 5).unwrap();
-//         assert_eq!(
-//             &[
-//                 Token::with_size(TokenKind::Array, Some(0), Some(20), 4),
-//                 Token::with_size(TokenKind::Str, Some(2), Some(3), 0),
-//                 Token::with_size(TokenKind::Str, Some(7), Some(8), 0),
-//                 Token::with_size(TokenKind::Str, Some(12), Some(13), 0),
-//                 Token::with_size(TokenKind::Primitive, Some(16), Some(19), 0)
-//             ],
-//             &tokens
-//         );
-//     }
-
-//     #[test]
-//     fn parse_array_oom() {
-//         let s = br#"["a", "b", "c", 100]"#;
-//         let err = parse!(s, 4).unwrap_err();
-//         assert_eq!(Error::NoMemory, err);
-//     }
-// }
+    #[test]
+    fn parse_string_too_long() {
+        let s = b"3:abcd";
+        let err = parse!(s, 2).unwrap_err();
+        assert_eq!(Error::Part, err);
+    }
+}
