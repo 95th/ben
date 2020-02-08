@@ -9,22 +9,17 @@ use core::ops::Range;
 #[derive(Default, Debug, Copy, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
-    pub start: Option<usize>,
-    pub end: Option<usize>,
+    pub start: isize,
+    pub end: isize,
     pub size: usize,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, start: Option<usize>, end: Option<usize>) -> Self {
+    pub fn new(kind: TokenKind, start: isize, end: isize) -> Self {
         Self::with_size(kind, start, end, 0)
     }
 
-    pub fn with_size(
-        kind: TokenKind,
-        start: Option<usize>,
-        end: Option<usize>,
-        size: usize,
-    ) -> Self {
+    pub fn with_size(kind: TokenKind, start: isize, end: isize, size: usize) -> Self {
         Self {
             kind,
             start,
@@ -34,7 +29,11 @@ impl Token {
     }
 
     pub fn as_range(&self) -> Option<Range<usize>> {
-        self.start.and_then(|start| self.end.map(|end| start..end))
+        if self.start != -1 && self.end != -1 {
+            Some(self.start as usize..self.end as usize)
+        } else {
+            None
+        }
     }
 }
 
@@ -111,7 +110,8 @@ impl BenDecoder {
                     self.parse_int(buf, b'e')?;
                     match self.alloc_token(tokens) {
                         Some(i) => {
-                            tokens[i] = Token::new(TokenKind::Int, Some(start), Some(self.pos));
+                            tokens[i] =
+                                Token::new(TokenKind::Int, start as isize, self.pos as isize);
                         }
                         None => {
                             self.pos = start;
@@ -127,7 +127,7 @@ impl BenDecoder {
                         tokens[self.tok_super as usize].size += 1;
                     }
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
-                    tokens[i] = Token::new(TokenKind::List, Some(self.pos), None);
+                    tokens[i] = Token::new(TokenKind::List, self.pos as isize, -1);
                     self.tok_super = self.tok_next as isize - 1;
                 }
                 b'd' => {
@@ -137,7 +137,7 @@ impl BenDecoder {
                         tokens[self.tok_super as usize].size += 1;
                     }
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
-                    tokens[i] = Token::new(TokenKind::Dict, Some(self.pos), None);
+                    tokens[i] = Token::new(TokenKind::Dict, self.pos as isize, -1);
                     self.tok_super = self.tok_next as isize - 1;
                 }
                 b'0'..=b'9' => {
@@ -149,7 +149,7 @@ impl BenDecoder {
                 }
                 b'e' => {
                     if self.tok_super >= 0 {
-                        tokens[self.tok_super as usize].end = Some(self.pos);
+                        tokens[self.tok_super as usize].end = self.pos as isize;
                     } else {
                         break;
                     }
@@ -162,7 +162,7 @@ impl BenDecoder {
         }
         for i in (0..self.tok_next).rev() {
             // Unclosed object
-            if tokens[i].start.is_some() && tokens[i].end.is_none() {
+            if tokens[i].start != -1 && tokens[i].end == -1 {
                 return Err(Error::Part);
             }
         }
@@ -237,28 +237,30 @@ impl BenDecoder {
             return Err(Error::ParseStr);
         }
 
-        match self.alloc_token(tokens) {
-            Some(i) => {
-                tokens[i] = Token::new(TokenKind::ByteStr, Some(self.pos - len), Some(self.pos));
-                Ok(())
-            }
-            None => {
-                self.pos = start;
-                Err(Error::NoMemory)
-            }
+        if let Some(i) = self.alloc_token(tokens) {
+            tokens[i] = Token::new(
+                TokenKind::ByteStr,
+                self.pos as isize,
+                (self.pos + len) as isize,
+            );
+            self.pos += len;
+            Ok(())
+        } else {
+            self.pos = start;
+            Err(Error::NoMemory)
         }
     }
 
     /// Allocates a fresh unused token from the token pool.
     fn alloc_token(&mut self, tokens: &mut [Token]) -> Option<usize> {
-        if self.tok_next as usize >= tokens.len() {
+        if self.tok_next >= tokens.len() {
             return None;
         }
         let idx = self.tok_next as usize;
         self.tok_next += 1;
         let tok = &mut tokens[idx];
-        tok.end = None;
-        tok.start = tok.end;
+        tok.start = -1;
+        tok.end = -1;
         tok.size = 0;
         Some(idx)
     }
