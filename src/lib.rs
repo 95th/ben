@@ -430,4 +430,23 @@ mod tests {
             &tokens
         );
     }
+
+    #[test]
+    fn list_nested_complex() {
+        let s = b"ld1:ald2:ablleeeeee";
+        let tokens = parse!(s, 8).unwrap();
+        assert_eq!(
+            &[
+                Token::with_size(TokenKind::List, 1, 18, 1),
+                Token::with_size(TokenKind::Dict, 2, 17, 1),
+                Token::with_size(TokenKind::ByteStr, 4, 5, 1),
+                Token::with_size(TokenKind::List, 6, 16, 1),
+                Token::with_size(TokenKind::Dict, 7, 15, 1),
+                Token::with_size(TokenKind::ByteStr, 9, 11, 1),
+                Token::with_size(TokenKind::List, 12, 14, 1),
+                Token::with_size(TokenKind::List, 13, 13, 0),
+            ],
+            &tokens
+        );
+    }
 }
