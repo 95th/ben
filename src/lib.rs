@@ -340,4 +340,34 @@ mod tests {
             &tokens
         );
     }
+
+    #[test]
+    fn empty_list() {
+        let s = b"le";
+        let tokens = parse!(s, 1).unwrap();
+        assert_eq!(&[Token::new(TokenKind::List, 1, 1)], &tokens);
+    }
+
+    #[test]
+    fn unclosed_list() {
+        let s = b"l";
+        let err = parse!(s, 1).unwrap_err();
+        assert_eq!(Error::Part, err);
+    }
+
+    #[test]
+    fn list_string_values() {
+        let s = b"l1:a2:ab3:abc4:abcde";
+        let tokens = parse!(s, 5).unwrap();
+        assert_eq!(
+            &[
+                Token::with_size(TokenKind::List, 1, 19, 4),
+                Token::new(TokenKind::ByteStr, 3, 4),
+                Token::new(TokenKind::ByteStr, 6, 8),
+                Token::new(TokenKind::ByteStr, 10, 13),
+                Token::new(TokenKind::ByteStr, 15, 19)
+            ],
+            &tokens
+        );
+    }
 }
