@@ -71,7 +71,7 @@ pub enum Error {
 pub struct BenDecoder {
     pos: usize,
     tok_next: usize,
-    tok_super: Option<usize>,
+    tok_super: isize,
 }
 
 impl Default for BenDecoder {
@@ -79,7 +79,7 @@ impl Default for BenDecoder {
         Self {
             pos: 0,
             tok_next: 0,
-            tok_super: None,
+            tok_super: -1,
         }
     }
 }
@@ -103,8 +103,8 @@ impl BenDecoder {
             match c {
                 b'i' => {
                     count += 1;
-                    if let Some(i) = self.tok_super {
-                        tokens[i].size += 1;
+                    if self.tok_super >= 0 {
+                        tokens[self.tok_super as usize].size += 1;
                     }
                     self.pos += 1;
                     let start = self.pos;
@@ -118,49 +118,50 @@ impl BenDecoder {
                             return Err(Error::Invalid);
                         }
                     }
+                    self.pos += 1;
                 }
                 b'l' => {
                     count += 1;
                     self.pos += 1;
-                    if let Some(i) = self.tok_super {
-                        tokens[i].size += 1;
+                    if self.tok_super >= 0 {
+                        tokens[self.tok_super as usize].size += 1;
                     }
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     tokens[i] = Token::new(TokenKind::List, Some(self.pos), None);
-                    self.tok_super = Some(self.tok_next - 1);
+                    self.tok_super = self.tok_next as isize - 1;
                 }
                 b'd' => {
                     count += 1;
                     self.pos += 1;
-                    if let Some(i) = self.tok_super {
-                        tokens[i].size += 1;
+                    if self.tok_super >= 0 {
+                        tokens[self.tok_super as usize].size += 1;
                     }
                     let i = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     tokens[i] = Token::new(TokenKind::Dict, Some(self.pos), None);
-                    self.tok_super = Some(self.tok_next - 1);
+                    self.tok_super = self.tok_next as isize - 1;
                 }
                 b'0'..=b'9' => {
                     count += 1;
                     self.parse_string(buf, tokens)?;
-                    if let Some(i) = self.tok_super {
-                        tokens[i].size += 1
+                    if self.tok_super >= 0 {
+                        tokens[self.tok_super as usize].size += 1;
                     }
                 }
                 b'e' => {
-                    if let Some(i) = self.tok_super {
-                        tokens[i].end = Some(self.pos);
+                    if self.tok_super >= 0 {
+                        tokens[self.tok_super as usize].end = Some(self.pos);
+                    } else {
+                        break;
                     }
-                    break;
                 }
                 _ => {
                     // Unexpected char
                     return Err(Error::Invalid);
                 }
             }
-            self.pos += 1;
         }
         for i in (0..self.tok_next).rev() {
-            // Unmatched opened object
+            // Unclosed object
             if tokens[i].start.is_some() && tokens[i].end.is_none() {
                 return Err(Error::Part);
             }
@@ -168,7 +169,7 @@ impl BenDecoder {
         Ok(count)
     }
 
-    /// Fills next available token with bencode int.
+    /// Parse bencode int.
     fn parse_int(&mut self, buf: &[u8], stop_char: u8) -> Result<i64, Error> {
         if self.pos >= buf.len() {
             return Err(Error::Invalid);
