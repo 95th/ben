@@ -204,10 +204,13 @@ impl BenDecoder {
                     val += digit;
                     self.pos += 1
                 }
-                c if c == stop_char => break,
-                _ => {
-                    self.pos = start;
-                    return Err(Error::Invalid);
+                c => {
+                    if c == stop_char {
+                        break;
+                    } else {
+                        self.pos = start;
+                        return Err(Error::Invalid);
+                    }
                 }
             }
         }
@@ -299,5 +302,42 @@ mod tests {
         let s = b"3:abcd";
         let err = parse!(s, 2).unwrap_err();
         assert_eq!(Error::Part, err);
+    }
+
+    #[test]
+    fn parse_string_too_short() {
+        let s = b"3:ab";
+        let err = parse!(s, 2).unwrap_err();
+        assert_eq!(Error::ParseStr, err);
+    }
+
+    #[test]
+    fn empty_dict() {
+        let s = b"de";
+        let tokens = parse!(s, 1).unwrap();
+        assert_eq!(&[Token::new(TokenKind::Dict, 1, 1)], &tokens);
+    }
+
+    #[test]
+    fn unclosed_dict() {
+        let s = b"d";
+        let err = parse!(s, 1).unwrap_err();
+        assert_eq!(Error::Part, err);
+    }
+
+    #[test]
+    fn dict_string_values() {
+        let s = b"d1:a2:ab3:abc4:abcde";
+        let tokens = parse!(s, 5).unwrap();
+        assert_eq!(
+            &[
+                Token::with_size(TokenKind::Dict, 1, 19, 4),
+                Token::new(TokenKind::ByteStr, 3, 4),
+                Token::new(TokenKind::ByteStr, 6, 8),
+                Token::new(TokenKind::ByteStr, 10, 13),
+                Token::new(TokenKind::ByteStr, 15, 19)
+            ],
+            &tokens
+        );
     }
 }
