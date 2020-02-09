@@ -62,10 +62,6 @@ pub enum Error {
     NoMemory,
     /// Overflow (numeric or otherwise)
     Overflow,
-    /// String parsing
-    ParseStr,
-    /// List parsing
-    ParseList,
 }
 
 /// Bencode Decoder
@@ -276,13 +272,13 @@ impl BenDecoder {
 
         if len <= 0 {
             self.pos = start;
-            return Err(Error::ParseStr);
+            return Err(Error::Invalid);
         }
 
         let len = len as usize;
         if self.pos + len > buf.len() {
             self.pos = start;
-            return Err(Error::ParseStr);
+            return Err(Error::Invalid);
         }
 
         if let Some(token) = self.alloc_token(tokens) {
@@ -350,7 +346,7 @@ mod tests {
     fn parse_string_too_short() {
         let s = b"3:ab";
         let err = parse!(s, 2).unwrap_err();
-        assert_eq!(Error::ParseStr, err);
+        assert_eq!(Error::Invalid, err);
     }
 
     #[test]
