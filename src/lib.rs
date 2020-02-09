@@ -2,7 +2,7 @@
 //! a flat stream of tokens rather than an actual tree and thus avoids
 //! unneccessary allocations.
 
-#![no_std]
+pub mod node;
 
 use core::ops::Range;
 
