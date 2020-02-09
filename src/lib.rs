@@ -13,7 +13,6 @@ pub enum TokenKind {
     List,
     ByteStr,
     Int,
-    End,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
