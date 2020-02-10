@@ -15,12 +15,8 @@ impl fmt::Debug for Node<'_> {
 }
 
 impl<'a> Node<'a> {
-    pub fn new(buf: &'a [u8], tokens: &'a [Token]) -> Self {
-        Self {
-            buf,
-            tokens,
-            idx: 0,
-        }
+    pub fn new(buf: &'a [u8], tokens: &'a [Token], idx: usize) -> Self {
+        Self { buf, tokens, idx }
     }
 
     pub fn data(&self) -> &'a [u8] {
@@ -33,22 +29,19 @@ impl<'a> Node<'a> {
             return None;
         }
 
-        let mut token = self.idx + 1;
+        let mut idx = self.idx + 1;
         let mut item = 0;
 
         while item < i {
-            token += self.tokens.get(token)?.next;
+            idx += self.tokens.get(idx)?.next;
             item += 1;
         }
 
-        if token >= self.tokens.len() {
+        if idx >= self.tokens.len() {
             return None;
         }
 
-        Some(Node {
-            idx: token,
-            ..*self
-        })
+        Some(Node { idx, ..*self })
     }
 }
 
@@ -72,7 +65,7 @@ mod tests {
     fn list_at() {
         let s = b"ld1:alee1:be";
         let tokens = parse!(s, 5).unwrap();
-        let node = Node::new(s, &tokens);
+        let node = Node::new(s, &tokens, 0);
         let n = node.list_at(1).unwrap();
         assert_eq!(b"b", n.data());
     }
@@ -81,10 +74,22 @@ mod tests {
     fn list_at_nested() {
         let s = b"l1:ad1:al1:aee1:be";
         let tokens = parse!(s, 7).unwrap();
-        let node = Node::new(s, &tokens);
+        let node = Node::new(s, &tokens, 0);
         assert_eq!(b"a", node.list_at(0).unwrap().data());
         assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
         assert_eq!(b"b", node.list_at(2).unwrap().data());
         assert_eq!(None, node.list_at(3));
     }
+
+    // FIXME
+    // #[test]
+    // fn list_at_overflow() {
+    //     let s = b"l1:al1:ad1:al1:aee1:be1:be";
+    //     let tokens = parse!(s, 10).unwrap();
+    //     let node = Node::new(s, &tokens, 2);
+    //     assert_eq!(b"a", node.list_at(0).unwrap().data());
+    //     assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
+    //     assert_eq!(b"b", node.list_at(2).unwrap().data());
+    //     assert_eq!(None, node.list_at(3));
+    // }
 }
