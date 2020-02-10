@@ -1,7 +1,7 @@
 use crate::{Token, TokenKind};
 use core::fmt;
 
-#[derive(Clone, PartialEq)]
+#[derive(PartialEq)]
 pub struct Node<'a> {
     buf: &'a [u8],
     tokens: &'a [Token],
@@ -23,6 +23,10 @@ impl<'a> Node<'a> {
         }
     }
 
+    pub fn data(&self) -> &'a [u8] {
+        &self.buf[self.tokens[self.idx].range()]
+    }
+
     pub fn list_at(&self, i: usize) -> Option<Node<'a>> {
         let this = self.tokens.get(self.idx)?;
         if this.kind != TokenKind::List {
@@ -41,9 +45,10 @@ impl<'a> Node<'a> {
             return None;
         }
 
-        let mut node = self.clone();
-        node.idx = token;
-        Some(node)
+        Some(Node {
+            idx: token,
+            ..*self
+        })
     }
 }
 
@@ -69,7 +74,7 @@ mod tests {
         let tokens = parse!(s, 5).unwrap();
         let node = Node::new(s, &tokens);
         let n = node.list_at(1).unwrap();
-        assert_eq!(4, n.idx);
+        assert_eq!(b"b", n.data());
     }
 
     #[test]
@@ -77,9 +82,9 @@ mod tests {
         let s = b"l1:ad1:al1:aee1:be";
         let tokens = parse!(s, 7).unwrap();
         let node = Node::new(s, &tokens);
-        assert_eq!(1, node.list_at(0).unwrap().idx);
-        assert_eq!(2, node.list_at(1).unwrap().idx);
-        assert_eq!(6, node.list_at(2).unwrap().idx);
+        assert_eq!(b"a", node.list_at(0).unwrap().data());
+        assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
+        assert_eq!(b"b", node.list_at(2).unwrap().data());
         assert_eq!(None, node.list_at(3));
     }
 }
