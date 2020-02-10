@@ -371,6 +371,14 @@ mod tests {
         assert_eq!(Error::Incomplete, err);
     }
 
+    // FIXME
+    // #[test]
+    // fn key_only_dict() {
+    //     let s = b"d1:ae";
+    //     let err = parse!(s, 2).unwrap_err();
+    //     assert_eq!(Error::Incomplete, err);
+    // }
+
     #[test]
     fn dict_string_values() {
         let s = b"d1:a2:ab3:abc4:abcde";
