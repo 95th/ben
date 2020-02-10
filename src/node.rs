@@ -1,10 +1,17 @@
 use crate::{Token, TokenKind};
+use core::fmt;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Node<'a> {
     buf: &'a [u8],
     tokens: &'a [Token],
     pub idx: usize,
+}
+
+impl fmt::Debug for Node<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Node").field("idx", &self.idx).finish()
+    }
 }
 
 impl<'a> Node<'a> {
@@ -22,16 +29,16 @@ impl<'a> Node<'a> {
             return None;
         }
 
-        if i >= this.children {
-            return None;
-        }
-
         let mut token = self.idx + 1;
         let mut item = 0;
 
         while item < i {
-            token += self.tokens[token].next;
+            token += self.tokens.get(token)?.next;
             item += 1;
+        }
+
+        if token >= self.tokens.len() {
+            return None;
         }
 
         let mut node = self.clone();
@@ -70,7 +77,9 @@ mod tests {
         let s = b"l1:ad1:al1:aee1:be";
         let tokens = parse!(s, 7).unwrap();
         let node = Node::new(s, &tokens);
-        let n = node.list_at(2).unwrap();
-        assert_eq!(6, n.idx);
+        assert_eq!(1, node.list_at(0).unwrap().idx);
+        assert_eq!(2, node.list_at(1).unwrap().idx);
+        assert_eq!(6, node.list_at(2).unwrap().idx);
+        assert_eq!(None, node.list_at(3));
     }
 }
