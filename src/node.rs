@@ -30,7 +30,7 @@ impl<'a> Node<'a> {
         let mut item = 0;
 
         while item < i {
-            token += children_total(token, self.tokens);
+            token += self.tokens[token].next;
             item += 1;
         }
 
@@ -38,17 +38,6 @@ impl<'a> Node<'a> {
         node.idx = token;
         Some(node)
     }
-}
-
-// TODO remove this recursion
-fn children_total(mut token: usize, all: &[Token]) -> usize {
-    let t = &all[token];
-    let mut total = 1;
-    for _ in 0..t.children {
-        token += 1;
-        total += children_total(token, all);
-    }
-    total
 }
 
 #[cfg(test)]
