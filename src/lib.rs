@@ -21,6 +21,7 @@ pub struct Token {
     pub start: isize,
     pub end: isize,
     pub children: usize,
+    pub next: usize,
 }
 
 impl Default for Token {
@@ -31,15 +32,22 @@ impl Default for Token {
 
 impl Token {
     pub fn new(kind: TokenKind, start: isize, end: isize) -> Self {
-        Self::with_size(kind, start, end, 0)
+        Self::with_size(kind, start, end, 0, 1)
     }
 
-    pub fn with_size(kind: TokenKind, start: isize, end: isize, children: usize) -> Self {
+    pub fn with_size(
+        kind: TokenKind,
+        start: isize,
+        end: isize,
+        children: usize,
+        next: usize,
+    ) -> Self {
         Self {
             kind,
             start,
             end,
             children,
+            next,
         }
     }
 
@@ -140,6 +148,7 @@ impl BenDecoder {
                     while i >= 0 {
                         let token = &mut tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
+                            token.next = self.tok_next - i as usize;
                             self.tok_super = -1;
                             token.end = self.pos as isize;
                             break;
@@ -368,11 +377,11 @@ mod tests {
         let tokens = parse!(s, 5).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::Dict, 1, 19, 2),
-                Token::with_size(TokenKind::ByteStr, 3, 4, 1),
-                Token::with_size(TokenKind::ByteStr, 6, 8, 0),
-                Token::with_size(TokenKind::ByteStr, 10, 13, 1),
-                Token::with_size(TokenKind::ByteStr, 15, 19, 0)
+                Token::with_size(TokenKind::Dict, 1, 19, 2, 5),
+                Token::with_size(TokenKind::ByteStr, 3, 4, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 6, 8, 0, 1),
+                Token::with_size(TokenKind::ByteStr, 10, 13, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 15, 19, 0, 1)
             ],
             &tokens
         );
@@ -384,19 +393,19 @@ mod tests {
         let tokens = parse!(s, 13).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::Dict, 1, 35, 6),
-                Token::with_size(TokenKind::ByteStr, 3, 4, 1),
-                Token::with_size(TokenKind::ByteStr, 6, 7, 0),
-                Token::with_size(TokenKind::ByteStr, 9, 10, 1),
-                Token::with_size(TokenKind::Int, 11, 12, 0),
-                Token::with_size(TokenKind::ByteStr, 15, 16, 1),
-                Token::with_size(TokenKind::ByteStr, 18, 19, 0),
-                Token::with_size(TokenKind::ByteStr, 21, 22, 1),
-                Token::with_size(TokenKind::Dict, 23, 23, 0),
-                Token::with_size(TokenKind::ByteStr, 26, 27, 1),
-                Token::with_size(TokenKind::List, 28, 28, 0),
-                Token::with_size(TokenKind::ByteStr, 31, 32, 1),
-                Token::with_size(TokenKind::ByteStr, 34, 35, 0)
+                Token::with_size(TokenKind::Dict, 1, 35, 6, 13),
+                Token::with_size(TokenKind::ByteStr, 3, 4, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 6, 7, 0, 1),
+                Token::with_size(TokenKind::ByteStr, 9, 10, 1, 1),
+                Token::with_size(TokenKind::Int, 11, 12, 0, 1),
+                Token::with_size(TokenKind::ByteStr, 15, 16, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 18, 19, 0, 1),
+                Token::with_size(TokenKind::ByteStr, 21, 22, 1, 1),
+                Token::with_size(TokenKind::Dict, 23, 23, 0, 1),
+                Token::with_size(TokenKind::ByteStr, 26, 27, 1, 1),
+                Token::with_size(TokenKind::List, 28, 28, 0, 1),
+                Token::with_size(TokenKind::ByteStr, 31, 32, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 34, 35, 0, 1)
             ],
             &tokens
         );
@@ -422,7 +431,7 @@ mod tests {
         let tokens = parse!(s, 5).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::List, 1, 19, 4),
+                Token::with_size(TokenKind::List, 1, 19, 4, 5),
                 Token::new(TokenKind::ByteStr, 3, 4),
                 Token::new(TokenKind::ByteStr, 6, 8),
                 Token::new(TokenKind::ByteStr, 10, 13),
@@ -438,10 +447,10 @@ mod tests {
         let tokens = parse!(s, 4).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::List, 1, 7, 1),
-                Token::with_size(TokenKind::List, 2, 6, 1),
-                Token::with_size(TokenKind::List, 3, 5, 1),
-                Token::with_size(TokenKind::List, 4, 4, 0),
+                Token::with_size(TokenKind::List, 1, 7, 1, 4),
+                Token::with_size(TokenKind::List, 2, 6, 1, 3),
+                Token::with_size(TokenKind::List, 3, 5, 1, 2),
+                Token::with_size(TokenKind::List, 4, 4, 0, 1),
             ],
             &tokens
         );
@@ -453,14 +462,14 @@ mod tests {
         let tokens = parse!(s, 8).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::List, 1, 18, 1),
-                Token::with_size(TokenKind::Dict, 2, 17, 1),
-                Token::with_size(TokenKind::ByteStr, 4, 5, 1),
-                Token::with_size(TokenKind::List, 6, 16, 1),
-                Token::with_size(TokenKind::Dict, 7, 15, 1),
-                Token::with_size(TokenKind::ByteStr, 9, 11, 1),
-                Token::with_size(TokenKind::List, 12, 14, 1),
-                Token::with_size(TokenKind::List, 13, 13, 0),
+                Token::with_size(TokenKind::List, 1, 18, 1, 8),
+                Token::with_size(TokenKind::Dict, 2, 17, 1, 7),
+                Token::with_size(TokenKind::ByteStr, 4, 5, 1, 1),
+                Token::with_size(TokenKind::List, 6, 16, 1, 5),
+                Token::with_size(TokenKind::Dict, 7, 15, 1, 4),
+                Token::with_size(TokenKind::ByteStr, 9, 11, 1, 1),
+                Token::with_size(TokenKind::List, 12, 14, 1, 2),
+                Token::with_size(TokenKind::List, 13, 13, 0, 1),
             ],
             &tokens
         );
