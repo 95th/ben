@@ -43,6 +43,43 @@ impl<'a> Node<'a> {
 
         Some(Node { idx, ..*self })
     }
+
+    pub fn list_iter(&self) -> ListIter<'_> {
+        let token = &self.tokens[self.idx];
+        let mut pos = 0;
+        if token.kind != TokenKind::List {
+            pos = token.children;
+        }
+        ListIter {
+            node: self,
+            total: token.children,
+            token_idx: self.idx + 1,
+            pos,
+        }
+    }
+}
+
+pub struct ListIter<'a> {
+    node: &'a Node<'a>,
+    total: usize,
+    token_idx: usize,
+    pos: usize,
+}
+
+impl<'a> Iterator for ListIter<'a> {
+    type Item = Node<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.total {
+            return None;
+        }
+
+        let idx = self.token_idx;
+        self.token_idx += self.node.tokens.get(self.token_idx)?.next;
+        self.pos += 1;
+
+        Some(Node { idx, ..*self.node })
+    }
 }
 
 #[cfg(test)]
@@ -90,5 +127,26 @@ mod tests {
         assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
         assert_eq!(b"b", node.list_at(2).unwrap().data());
         assert_eq!(None, node.list_at(3));
+    }
+
+    #[test]
+    fn list_iter() {
+        let s = b"l1:ad1:al1:aee1:be";
+        let tokens = parse!(s, 7).unwrap();
+        let node = Node::new(s, &tokens, 0);
+        let mut iter = node.list_iter();
+        assert_eq!(b"a", iter.next().unwrap().data());
+        assert_eq!(b"1:al1:ae", iter.next().unwrap().data());
+        assert_eq!(b"b", iter.next().unwrap().data());
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn list_iter_not_a_list() {
+        let s = b"de";
+        let tokens = parse!(s, 1).unwrap();
+        let node = Node::new(s, &tokens, 0);
+        let mut iter = node.list_iter();
+        assert_eq!(None, iter.next());
     }
 }
