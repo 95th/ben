@@ -5,7 +5,7 @@ use core::fmt;
 pub struct Node<'a> {
     buf: &'a [u8],
     tokens: &'a [Token],
-    pub idx: usize,
+    idx: usize,
 }
 
 impl fmt::Debug for Node<'_> {
@@ -21,6 +21,10 @@ impl<'a> Node<'a> {
 
     pub fn data(&self) -> &'a [u8] {
         &self.buf[self.tokens[self.idx].range()]
+    }
+
+    pub fn kind(&self) -> TokenKind {
+        self.tokens[self.idx].kind
     }
 
     pub fn list_at(&self, i: usize) -> Option<Node<'a>> {
@@ -46,11 +50,25 @@ impl<'a> Node<'a> {
 
     pub fn list_iter(&self) -> ListIter<'_> {
         let token = &self.tokens[self.idx];
-        let mut pos = 0;
-        if token.kind != TokenKind::List {
-            pos = token.children;
-        }
+        let pos = match token.kind {
+            TokenKind::List => 0,
+            _ => token.children,
+        };
         ListIter {
+            node: self,
+            total: token.children,
+            token_idx: self.idx + 1,
+            pos,
+        }
+    }
+
+    pub fn dict_iter(&self) -> DictIter<'_> {
+        let token = &self.tokens[self.idx];
+        let pos = match token.kind {
+            TokenKind::Dict => 0,
+            _ => token.children,
+        };
+        DictIter {
             node: self,
             total: token.children,
             token_idx: self.idx + 1,
@@ -79,6 +97,41 @@ impl<'a> Iterator for ListIter<'a> {
         self.pos += 1;
 
         Some(Node { idx, ..*self.node })
+    }
+}
+
+pub struct DictIter<'a> {
+    node: &'a Node<'a>,
+    total: usize,
+    token_idx: usize,
+    pos: usize,
+}
+
+impl<'a> Iterator for DictIter<'a> {
+    type Item = (&'a [u8], Node<'a>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.total {
+            return None;
+        }
+
+        let key_idx = self.token_idx;
+        self.token_idx += self.node.tokens.get(self.token_idx)?.next;
+        let val_idx = self.token_idx;
+        self.token_idx += self.node.tokens.get(self.token_idx)?.next;
+        self.pos += 1;
+
+        Some((
+            Node {
+                idx: key_idx,
+                ..*self.node
+            }
+            .data(),
+            Node {
+                idx: val_idx,
+                ..*self.node
+            },
+        ))
     }
 }
 
@@ -147,6 +200,38 @@ mod tests {
         let tokens = parse!(s, 1).unwrap();
         let node = Node::new(s, &tokens, 0);
         let mut iter = node.list_iter();
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn dict_iter() {
+        let s = b"d1:a2:bc3:def4:ghije";
+        let tokens = parse!(s, 5).unwrap();
+        let node = Node::new(s, &tokens, 0);
+        let mut iter = node.dict_iter();
+
+        let (k, v) = iter.next().unwrap();
+        assert_eq!(b"a", k);
+        assert_eq!(b"bc", v.data());
+
+        let (k, v) = iter.next().unwrap();
+        assert_eq!(b"def", k);
+        assert_eq!(b"ghij", v.data());
+
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn dict_iter_2() {
+        let s = b"d1:alee";
+        let tokens = parse!(s, 3).unwrap();
+        let node = Node::new(s, &tokens, 0);
+        let mut iter = node.dict_iter();
+
+        let (k, v) = iter.next().unwrap();
+        assert_eq!(b"a", k);
+        assert_eq!(b"", v.data());
+
         assert_eq!(None, iter.next());
     }
 }
