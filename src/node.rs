@@ -24,8 +24,12 @@ impl<'a> Node<'a> {
     }
 
     pub fn list_at(&self, i: usize) -> Option<Node<'a>> {
-        let this = self.tokens.get(self.idx)?;
-        if this.kind != TokenKind::List {
+        let token = self.tokens.get(self.idx)?;
+        if token.kind != TokenKind::List {
+            return None;
+        }
+
+        if i >= token.children {
             return None;
         }
 
@@ -35,10 +39,6 @@ impl<'a> Node<'a> {
         while item < i {
             idx += self.tokens.get(idx)?.next;
             item += 1;
-        }
-
-        if idx >= self.tokens.len() {
-            return None;
         }
 
         Some(Node { idx, ..*self })
@@ -81,15 +81,14 @@ mod tests {
         assert_eq!(None, node.list_at(3));
     }
 
-    // FIXME
-    // #[test]
-    // fn list_at_overflow() {
-    //     let s = b"l1:al1:ad1:al1:aee1:be1:be";
-    //     let tokens = parse!(s, 10).unwrap();
-    //     let node = Node::new(s, &tokens, 2);
-    //     assert_eq!(b"a", node.list_at(0).unwrap().data());
-    //     assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
-    //     assert_eq!(b"b", node.list_at(2).unwrap().data());
-    //     assert_eq!(None, node.list_at(3));
-    // }
+    #[test]
+    fn list_at_overflow() {
+        let s = b"l1:al1:ad1:al1:aee1:be1:be";
+        let tokens = parse!(s, 10).unwrap();
+        let node = Node::new(s, &tokens, 2);
+        assert_eq!(b"a", node.list_at(0).unwrap().data());
+        assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
+        assert_eq!(b"b", node.list_at(2).unwrap().data());
+        assert_eq!(None, node.list_at(3));
+    }
 }
