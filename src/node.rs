@@ -147,10 +147,14 @@ impl<'a> Iterator for DictIter<'a> {
             return None;
         }
 
+        debug_assert!(self.token_idx < self.node.tokens.len());
         let key_idx = self.token_idx;
         self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
+
+        debug_assert!(self.token_idx < self.node.tokens.len());
         let val_idx = self.token_idx;
         self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
+
         self.pos += 2;
 
         Some((
