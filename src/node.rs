@@ -149,6 +149,8 @@ impl<'a> Iterator for DictIter<'a> {
 
         debug_assert!(self.token_idx < self.node.tokens.len());
         let key_idx = self.token_idx;
+
+        debug_assert_eq!(TokenKind::ByteStr, self.node.tokens[key_idx].kind);
         self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
 
         debug_assert!(self.token_idx < self.node.tokens.len());
