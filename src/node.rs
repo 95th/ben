@@ -105,7 +105,7 @@ impl<'a> Node<'a> {
             return "";
         }
         let bytes = &self.buf[token.range()];
-        std::str::from_utf8(bytes).unwrap_or_default()
+        core::str::from_utf8(bytes).unwrap_or_default()
     }
 }
 

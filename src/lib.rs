@@ -1,6 +1,7 @@
 //! `ben` is an efficient Bencode parser which parses the structure into
 //! a flat stream of tokens rather than an actual tree and thus avoids
 //! unneccessary allocations.
+#![no_std]
 
 pub mod node;
 
