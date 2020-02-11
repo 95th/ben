@@ -17,11 +17,11 @@ pub enum TokenKind {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Token {
-    pub kind: TokenKind,
-    pub start: i32,
-    pub end: i32,
-    pub children: u32,
-    pub next: u32,
+    pub(crate) kind: TokenKind,
+    pub(crate) start: i32,
+    pub(crate) end: i32,
+    pub(crate) children: u32,
+    pub(crate) next: u32,
 }
 
 impl Default for Token {
