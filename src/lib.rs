@@ -96,25 +96,28 @@ impl BenDecoder {
         self.token_limit = token_limit;
     }
 
-    ///
-    /// Run Bencode parser. It parses a bencoded data string into an array of tokens, each
+    /// Run Bencode parser. It parses a bencoded data string and returns a vector of tokens, each
     /// describing a single Bencode object.
-    ///
-    /// Parse bencoded string and fill tokens.
-    ///
-    /// Returns number of tokens parsed.
     pub fn parse(&mut self, buf: &[u8]) -> Result<Vec<Token>, Error> {
         let mut tokens = vec![];
+        self.parse_in(buf, &mut tokens)?;
+        Ok(tokens)
+    }
+
+    /// Run Bencode parser. It parses a bencoded data string into given vector of tokens, each
+    /// describing a single Bencode object.
+    pub fn parse_in(&mut self, buf: &[u8], tokens: &mut Vec<Token>) -> Result<(), Error> {
+        tokens.clear();
         while self.pos < buf.len() {
             let c = buf[self.pos];
             match c {
                 b'i' => {
-                    self.update_super(&mut tokens, TokenKind::Int)?;
+                    self.update_super(TokenKind::Int, tokens)?;
                     self.pos += 1;
                     let start = self.pos;
                     self.parse_int(buf, b'e')?;
                     let token = Token::new(TokenKind::Int, start as _, self.pos as _);
-                    if let Err(e) = self.alloc_token(&mut tokens, token) {
+                    if let Err(e) = self.alloc_token(token, tokens) {
                         self.pos = start;
                         return Err(e);
                     }
@@ -123,20 +126,20 @@ impl BenDecoder {
                 b'l' => {
                     self.pos += 1;
                     let token = Token::new(TokenKind::List, self.pos as _, -1);
-                    self.alloc_token(&mut tokens, token)?;
-                    self.update_super(&mut tokens, TokenKind::List)?;
+                    self.alloc_token(token, tokens)?;
+                    self.update_super(TokenKind::List, tokens)?;
                     self.tok_super = self.tok_next as isize - 1;
                 }
                 b'd' => {
                     self.pos += 1;
                     let token = Token::new(TokenKind::Dict, self.pos as _, -1);
-                    self.alloc_token(&mut tokens, token)?;
-                    self.update_super(&mut tokens, TokenKind::Dict)?;
+                    self.alloc_token(token, tokens)?;
+                    self.update_super(TokenKind::Dict, tokens)?;
                     self.tok_super = self.tok_next as isize - 1;
                 }
                 b'0'..=b'9' => {
-                    self.parse_string(buf, &mut tokens)?;
-                    self.update_super(&mut tokens, TokenKind::ByteStr)?;
+                    self.parse_string(buf, tokens)?;
+                    self.update_super(TokenKind::ByteStr, tokens)?;
                 }
                 b'e' => {
                     let mut i = (self.tok_next - 1) as i32;
@@ -158,7 +161,7 @@ impl BenDecoder {
                     }
 
                     while i >= 0 {
-                        let token = &mut tokens[i as usize];
+                        let token = tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
                             self.tok_super = i as _;
                             break;
@@ -188,10 +191,10 @@ impl BenDecoder {
                 }
             }
         }
-        Ok(tokens)
+        Ok(())
     }
 
-    fn update_super(&mut self, tokens: &mut [Token], curr_kind: TokenKind) -> Result<(), Error> {
+    fn update_super(&mut self, curr_kind: TokenKind, tokens: &mut [Token]) -> Result<(), Error> {
         if self.tok_super < 0 {
             return Ok(());
         }
@@ -278,7 +281,7 @@ impl BenDecoder {
         }
 
         let token = Token::new(TokenKind::ByteStr, self.pos as _, (self.pos + len) as _);
-        if let Ok(_) = self.alloc_token(tokens, token) {
+        if let Ok(_) = self.alloc_token(token, tokens) {
             self.pos += len;
             Ok(())
         } else {
@@ -288,7 +291,7 @@ impl BenDecoder {
     }
 
     /// Returns the next unused token from the slice.
-    fn alloc_token(&mut self, tokens: &mut Vec<Token>, token: Token) -> Result<(), Error> {
+    fn alloc_token(&mut self, token: Token, tokens: &mut Vec<Token>) -> Result<(), Error> {
         if tokens.len() >= self.token_limit {
             return Err(Error::NoMemory);
         }
