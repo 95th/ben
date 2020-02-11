@@ -177,20 +177,16 @@ mod tests {
     use crate::*;
 
     macro_rules! parse {
-        ($buf: expr, $len: expr) => {{
-            let mut v = [Token::default(); $len];
+        ($buf: expr) => {{
             let mut parser = BenDecoder::new();
-            parser.parse($buf, &mut v).map(|parsed| {
-                assert_eq!($len, parsed);
-                v
-            })
+            parser.parse($buf)
         }};
     }
 
     #[test]
     fn list_at() {
         let s = b"ld1:alee1:be";
-        let tokens = parse!(s, 5).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         let n = node.list_at(1).unwrap();
         assert_eq!(b"b", n.data());
@@ -199,7 +195,7 @@ mod tests {
     #[test]
     fn list_at_nested() {
         let s = b"l1:ad1:al1:aee1:be";
-        let tokens = parse!(s, 7).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         assert_eq!(b"a", node.list_at(0).unwrap().data());
         assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
@@ -210,7 +206,7 @@ mod tests {
     #[test]
     fn list_at_overflow() {
         let s = b"l1:al1:ad1:al1:aee1:be1:be";
-        let tokens = parse!(s, 10).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 2);
         assert_eq!(b"a", node.list_at(0).unwrap().data());
         assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
@@ -221,7 +217,7 @@ mod tests {
     #[test]
     fn list_iter() {
         let s = b"l1:ad1:al1:aee1:be";
-        let tokens = parse!(s, 7).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         let mut iter = node.list_iter();
         assert_eq!(b"a", iter.next().unwrap().data());
@@ -233,7 +229,7 @@ mod tests {
     #[test]
     fn list_iter_not_a_list() {
         let s = b"de";
-        let tokens = parse!(s, 1).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         let mut iter = node.list_iter();
         assert_eq!(None, iter.next());
@@ -242,7 +238,7 @@ mod tests {
     #[test]
     fn dict_iter() {
         let s = b"d1:a2:bc3:def4:ghije";
-        let tokens = parse!(s, 5).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         let mut iter = node.dict_iter();
 
@@ -260,7 +256,7 @@ mod tests {
     #[test]
     fn dict_iter_2() {
         let s = b"d1:alee";
-        let tokens = parse!(s, 3).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         let mut iter = node.dict_iter();
 
@@ -274,7 +270,7 @@ mod tests {
     #[test]
     fn dict_iter_inside_list() {
         let s = b"ld1:alee1:a1:ae";
-        let tokens = parse!(s, 6).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         let mut list_iter = node.list_iter();
 
@@ -295,7 +291,7 @@ mod tests {
     #[test]
     fn int_value() {
         let s = b"i12e";
-        let tokens = parse!(s, 1).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         assert_eq!(12, node.int_value());
     }
@@ -303,7 +299,7 @@ mod tests {
     #[test]
     fn int_value_negative() {
         let s = b"i-12e";
-        let tokens = parse!(s, 1).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         assert_eq!(-12, node.int_value());
     }
@@ -311,14 +307,14 @@ mod tests {
     #[test]
     fn int_value_invalid() {
         let s = b"ixyze";
-        let err = parse!(s, 1).unwrap_err();
+        let err = parse!(s).unwrap_err();
         assert_eq!(Error::Invalid, err);
     }
 
     #[test]
     fn str_value() {
         let s = b"5:abcde";
-        let tokens = parse!(s, 1).unwrap();
+        let tokens = parse!(s).unwrap();
         let node = Node::new(s, &tokens, 0);
         assert_eq!("abcde", node.str_value());
     }
