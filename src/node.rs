@@ -75,6 +75,38 @@ impl<'a> Node<'a> {
             pos,
         }
     }
+
+    pub fn int_value(&self) -> i64 {
+        let token = &self.tokens[self.idx];
+        if token.kind != TokenKind::Int {
+            return 0;
+        }
+        let mut val = 0;
+        let mut negative = false;
+        for &c in &self.buf[token.range()] {
+            if c == b'-' {
+                negative = true;
+                continue;
+            }
+            val *= 10;
+            let digit = (c - b'0') as i64;
+            val += digit;
+        }
+        if negative {
+            -val
+        } else {
+            val
+        }
+    }
+
+    pub fn str_value(&self) -> &str {
+        let token = &self.tokens[self.idx];
+        if token.kind != TokenKind::ByteStr {
+            return "";
+        }
+        let bytes = &self.buf[token.range()];
+        std::str::from_utf8(bytes).unwrap_or_default()
+    }
 }
 
 pub struct ListIter<'a> {
@@ -233,5 +265,36 @@ mod tests {
         assert_eq!(b"", v.data());
 
         assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn int_value() {
+        let s = b"i12e";
+        let tokens = parse!(s, 1).unwrap();
+        let node = Node::new(s, &tokens, 0);
+        assert_eq!(12, node.int_value());
+    }
+
+    #[test]
+    fn int_value_negative() {
+        let s = b"i-12e";
+        let tokens = parse!(s, 1).unwrap();
+        let node = Node::new(s, &tokens, 0);
+        assert_eq!(-12, node.int_value());
+    }
+
+    #[test]
+    fn int_value_invalid() {
+        let s = b"ixyze";
+        let err = parse!(s, 1).unwrap_err();
+        assert_eq!(Error::Invalid, err);
+    }
+
+    #[test]
+    fn str_value() {
+        let s = b"5:abcde";
+        let tokens = parse!(s, 1).unwrap();
+        let node = Node::new(s, &tokens, 0);
+        assert_eq!("abcde", node.str_value());
     }
 }
