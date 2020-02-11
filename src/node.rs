@@ -33,7 +33,7 @@ impl<'a> Node<'a> {
             return None;
         }
 
-        if i >= token.children {
+        if i >= token.children as usize {
             return None;
         }
 
@@ -41,7 +41,7 @@ impl<'a> Node<'a> {
         let mut item = 0;
 
         while item < i {
-            idx += self.tokens.get(idx)?.next;
+            idx += self.tokens.get(idx)?.next as usize;
             item += 1;
         }
 
@@ -52,11 +52,11 @@ impl<'a> Node<'a> {
         let token = &self.tokens[self.idx];
         let pos = match token.kind {
             TokenKind::List => 0,
-            _ => token.children,
+            _ => token.children as usize,
         };
         ListIter {
             node: self,
-            total: token.children,
+            total: token.children as usize,
             token_idx: self.idx + 1,
             pos,
         }
@@ -66,11 +66,11 @@ impl<'a> Node<'a> {
         let token = &self.tokens[self.idx];
         let pos = match token.kind {
             TokenKind::Dict => 0,
-            _ => token.children,
+            _ => token.children as usize,
         };
         DictIter {
             node: self,
-            total: token.children,
+            total: token.children as usize,
             token_idx: self.idx + 1,
             pos,
         }
@@ -93,7 +93,7 @@ impl<'a> Iterator for ListIter<'a> {
         }
 
         let idx = self.token_idx;
-        self.token_idx += self.node.tokens.get(self.token_idx)?.next;
+        self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
         self.pos += 1;
 
         Some(Node { idx, ..*self.node })
@@ -116,9 +116,9 @@ impl<'a> Iterator for DictIter<'a> {
         }
 
         let key_idx = self.token_idx;
-        self.token_idx += self.node.tokens.get(self.token_idx)?.next;
+        self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
         let val_idx = self.token_idx;
-        self.token_idx += self.node.tokens.get(self.token_idx)?.next;
+        self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
         self.pos += 1;
 
         Some((

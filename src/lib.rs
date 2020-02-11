@@ -18,10 +18,10 @@ pub enum TokenKind {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
-    pub start: isize,
-    pub end: isize,
-    pub children: usize,
-    pub next: usize,
+    pub start: i32,
+    pub end: i32,
+    pub children: u32,
+    pub next: u32,
 }
 
 impl Default for Token {
@@ -31,17 +31,11 @@ impl Default for Token {
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, start: isize, end: isize) -> Self {
+    pub fn new(kind: TokenKind, start: i32, end: i32) -> Self {
         Self::with_size(kind, start, end, 0, 1)
     }
 
-    pub fn with_size(
-        kind: TokenKind,
-        start: isize,
-        end: isize,
-        children: usize,
-        next: usize,
-    ) -> Self {
+    pub fn with_size(kind: TokenKind, start: i32, end: i32, children: u32, next: u32) -> Self {
         Self {
             kind,
             start,
@@ -113,7 +107,7 @@ impl BenDecoder {
                     self.parse_int(buf, b'e')?;
                     match self.alloc_token(tokens) {
                         Some(token) => {
-                            *token = Token::new(TokenKind::Int, start as isize, self.pos as isize);
+                            *token = Token::new(TokenKind::Int, start as _, self.pos as _);
                         }
                         None => {
                             self.pos = start;
@@ -126,7 +120,7 @@ impl BenDecoder {
                     count += 1;
                     self.pos += 1;
                     let token = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
-                    *token = Token::new(TokenKind::List, self.pos as isize, -1);
+                    *token = Token::new(TokenKind::List, self.pos as _, -1);
                     self.update_super(tokens, TokenKind::List)?;
                     self.tok_super = self.tok_next as isize - 1;
                 }
@@ -134,7 +128,7 @@ impl BenDecoder {
                     count += 1;
                     self.pos += 1;
                     let token = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
-                    *token = Token::new(TokenKind::Dict, self.pos as isize, -1);
+                    *token = Token::new(TokenKind::Dict, self.pos as _, -1);
                     self.update_super(tokens, TokenKind::Dict)?;
                     self.tok_super = self.tok_next as isize - 1;
                 }
@@ -144,13 +138,13 @@ impl BenDecoder {
                     self.update_super(tokens, TokenKind::ByteStr)?;
                 }
                 b'e' => {
-                    let mut i = (self.tok_next - 1) as isize;
+                    let mut i = (self.tok_next - 1) as i32;
                     while i >= 0 {
                         let token = &mut tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
-                            token.next = self.tok_next - i as usize;
+                            token.next = self.tok_next as u32 - i as u32;
                             self.tok_super = -1;
-                            token.end = self.pos as isize;
+                            token.end = self.pos as _;
                             break;
                         } else {
                             i -= 1
@@ -165,7 +159,7 @@ impl BenDecoder {
                     while i >= 0 {
                         let token = &mut tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
-                            self.tok_super = i;
+                            self.tok_super = i as _;
                             break;
                         } else {
                             i -= 1
@@ -283,11 +277,7 @@ impl BenDecoder {
         }
 
         if let Some(token) = self.alloc_token(tokens) {
-            *token = Token::new(
-                TokenKind::ByteStr,
-                self.pos as isize,
-                (self.pos + len) as isize,
-            );
+            *token = Token::new(TokenKind::ByteStr, self.pos as _, (self.pos + len) as _);
             self.pos += len;
             Ok(())
         } else {
