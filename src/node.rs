@@ -151,7 +151,7 @@ impl<'a> Iterator for DictIter<'a> {
         self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
         let val_idx = self.token_idx;
         self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
-        self.pos += 1;
+        self.pos += 2;
 
         Some((
             Node {
@@ -259,6 +259,27 @@ mod tests {
         let tokens = parse!(s, 3).unwrap();
         let node = Node::new(s, &tokens, 0);
         let mut iter = node.dict_iter();
+
+        let (k, v) = iter.next().unwrap();
+        assert_eq!(b"a", k);
+        assert_eq!(b"", v.data());
+
+        assert_eq!(None, iter.next());
+    }
+
+    #[test]
+    fn dict_iter_inside_list() {
+        let s = b"ld1:alee1:a1:ae";
+        let tokens = parse!(s, 6).unwrap();
+        let node = Node::new(s, &tokens, 0);
+        let mut list_iter = node.list_iter();
+
+        let dict = list_iter.next().unwrap();
+        assert_eq!(b"a", list_iter.next().unwrap().data());
+        assert_eq!(b"a", list_iter.next().unwrap().data());
+        assert_eq!(None, list_iter.next());
+
+        let mut iter = dict.dict_iter();
 
         let (k, v) = iter.next().unwrap();
         assert_eq!(b"a", k);
