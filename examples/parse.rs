@@ -1,14 +1,9 @@
-use ben::BenDecoder;
+use ben::{BenDecoder, Error};
 
 fn main() {
-    let s = br#"d1:a1:b1:ci1e1:x1:ye"#;
+    let s = b"ld1:alee1:be";
     let p = &mut BenDecoder::new();
-    let tokens = &mut [Default::default(); 1000];
-    match p.parse(s, tokens) {
-        Ok(n) => println!("{:#?}", &tokens[..n]),
-        Err(e) => {
-            println!("{:#?}", &tokens[..]);
-            println!("Error: {:#?}", e);
-        }
-    }
+    let tokens = &mut [Default::default(); 5];
+    let err = p.parse(s, tokens).unwrap_err();
+    assert_eq!(Error::Incomplete, err);
 }

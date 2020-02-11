@@ -125,17 +125,17 @@ impl BenDecoder {
                 b'l' => {
                     count += 1;
                     self.pos += 1;
-                    self.update_super(tokens, TokenKind::List)?;
                     let token = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     *token = Token::new(TokenKind::List, self.pos as isize, -1);
+                    self.update_super(tokens, TokenKind::List)?;
                     self.tok_super = self.tok_next as isize - 1;
                 }
                 b'd' => {
                     count += 1;
                     self.pos += 1;
-                    self.update_super(tokens, TokenKind::Dict)?;
                     let token = self.alloc_token(tokens).ok_or(Error::NoMemory)?;
                     *token = Token::new(TokenKind::Dict, self.pos as isize, -1);
+                    self.update_super(tokens, TokenKind::Dict)?;
                     self.tok_super = self.tok_next as isize - 1;
                 }
                 b'0'..=b'9' => {
@@ -157,7 +157,7 @@ impl BenDecoder {
                         }
                     }
 
-                    // Error if unmatched closing bracket
+                    // Error if unclosed object
                     if i == -1 {
                         return Err(Error::Invalid);
                     }
@@ -180,39 +180,32 @@ impl BenDecoder {
             }
         }
         for i in (0..self.tok_next).rev() {
+            let token = &tokens[i];
+
             // Unclosed object
-            if tokens[i].start >= 0 && tokens[i].end < 0 {
+            if token.start >= 0 && token.end < 0 {
                 return Err(Error::Incomplete);
+            }
+
+            if let TokenKind::Dict = token.kind {
+                if token.children % 2 != 0 {
+                    return Err(Error::Incomplete);
+                }
             }
         }
         Ok(count)
     }
 
     fn update_super(&mut self, tokens: &mut [Token], my_kind: TokenKind) -> Result<(), Error> {
-        if self.tok_super >= 0 {
-            let t = &mut tokens[self.tok_super as usize];
-            t.children += 1;
-            match t.kind {
-                TokenKind::Dict => {
-                    if let TokenKind::ByteStr = my_kind {
-                        self.tok_super = self.tok_next as isize - 1;
-                    } else {
-                        // Can't have key other than byte string
-                        return Err(Error::Invalid);
-                    }
-                }
-                TokenKind::ByteStr => {
-                    for i in (0..self.tok_next).rev() {
-                        let t = &tokens[i as usize];
-                        if let TokenKind::Dict = t.kind {
-                            if t.start >= 0 && t.end < 0 {
-                                self.tok_super = i as isize;
-                                break;
-                            }
-                        }
-                    }
-                }
-                _ => {}
+        if self.tok_super < 0 {
+            return Ok(());
+        }
+
+        let t = &mut tokens[self.tok_super as usize];
+        t.children += 1;
+        if let TokenKind::Dict = t.kind {
+            if my_kind != TokenKind::ByteStr && t.children % 2 != 0 {
+                return Err(Error::Invalid); // Can't have key other than byte string
             }
         }
         Ok(())
@@ -371,13 +364,19 @@ mod tests {
         assert_eq!(Error::Incomplete, err);
     }
 
-    // FIXME
-    // #[test]
-    // fn key_only_dict() {
-    //     let s = b"d1:ae";
-    //     let err = parse!(s, 2).unwrap_err();
-    //     assert_eq!(Error::Incomplete, err);
-    // }
+    #[test]
+    fn key_only_dict() {
+        let s = b"d1:ae";
+        let err = parse!(s, 2).unwrap_err();
+        assert_eq!(Error::Incomplete, err);
+    }
+
+    #[test]
+    fn key_only_dict_2() {
+        let s = b"d1:a1:a1:ae";
+        let err = parse!(s, 4).unwrap_err();
+        assert_eq!(Error::Incomplete, err);
+    }
 
     #[test]
     fn dict_string_values() {
@@ -385,10 +384,10 @@ mod tests {
         let tokens = parse!(s, 5).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::Dict, 1, 19, 2, 5),
-                Token::with_size(TokenKind::ByteStr, 3, 4, 1, 1),
+                Token::with_size(TokenKind::Dict, 1, 19, 4, 5),
+                Token::with_size(TokenKind::ByteStr, 3, 4, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 6, 8, 0, 1),
-                Token::with_size(TokenKind::ByteStr, 10, 13, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 10, 13, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 15, 19, 0, 1)
             ],
             &tokens
@@ -401,18 +400,18 @@ mod tests {
         let tokens = parse!(s, 13).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::Dict, 1, 35, 6, 13),
-                Token::with_size(TokenKind::ByteStr, 3, 4, 1, 1),
+                Token::with_size(TokenKind::Dict, 1, 35, 12, 13),
+                Token::with_size(TokenKind::ByteStr, 3, 4, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 6, 7, 0, 1),
-                Token::with_size(TokenKind::ByteStr, 9, 10, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 9, 10, 0, 1),
                 Token::with_size(TokenKind::Int, 11, 12, 0, 1),
-                Token::with_size(TokenKind::ByteStr, 15, 16, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 15, 16, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 18, 19, 0, 1),
-                Token::with_size(TokenKind::ByteStr, 21, 22, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 21, 22, 0, 1),
                 Token::with_size(TokenKind::Dict, 23, 23, 0, 1),
-                Token::with_size(TokenKind::ByteStr, 26, 27, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 26, 27, 0, 1),
                 Token::with_size(TokenKind::List, 28, 28, 0, 1),
-                Token::with_size(TokenKind::ByteStr, 31, 32, 1, 1),
+                Token::with_size(TokenKind::ByteStr, 31, 32, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 34, 35, 0, 1)
             ],
             &tokens
@@ -471,11 +470,11 @@ mod tests {
         assert_eq!(
             &[
                 Token::with_size(TokenKind::List, 1, 18, 1, 8),
-                Token::with_size(TokenKind::Dict, 2, 17, 1, 7),
-                Token::with_size(TokenKind::ByteStr, 4, 5, 1, 1),
+                Token::with_size(TokenKind::Dict, 2, 17, 2, 7),
+                Token::with_size(TokenKind::ByteStr, 4, 5, 0, 1),
                 Token::with_size(TokenKind::List, 6, 16, 1, 5),
-                Token::with_size(TokenKind::Dict, 7, 15, 1, 4),
-                Token::with_size(TokenKind::ByteStr, 9, 11, 1, 1),
+                Token::with_size(TokenKind::Dict, 7, 15, 2, 4),
+                Token::with_size(TokenKind::ByteStr, 9, 11, 0, 1),
                 Token::with_size(TokenKind::List, 12, 14, 1, 2),
                 Token::with_size(TokenKind::List, 13, 13, 0, 1),
             ],
