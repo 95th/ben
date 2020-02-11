@@ -305,73 +305,66 @@ impl BenDecoder {
 mod tests {
     use super::*;
 
-    macro_rules! parse {
-        ($buf: expr) => {{
-            let mut parser = BenDecoder::new();
-            parser.parse($buf)
-        }};
-    }
-
     #[test]
     fn parse_int() {
         let s = b"i12e";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(&[Token::new(TokenKind::Int, 1, 3)], &tokens[..]);
     }
 
     #[test]
     fn parse_string() {
         let s = b"3:abc";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(&[Token::new(TokenKind::ByteStr, 2, 5)], &tokens[..]);
     }
 
     #[test]
     fn parse_string_too_long() {
         let s = b"3:abcd";
-        let err = parse!(s).unwrap_err();
+        let err = BenDecoder::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn parse_string_too_short() {
         let s = b"3:ab";
-        let err = parse!(s).unwrap_err();
+        let err = BenDecoder::new().parse(s).unwrap_err();
         assert_eq!(Error::Invalid, err);
     }
 
     #[test]
     fn empty_dict() {
         let s = b"de";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(&[Token::new(TokenKind::Dict, 1, 1)], &tokens[..]);
     }
 
     #[test]
     fn unclosed_dict() {
         let s = b"d";
-        let err = parse!(s).unwrap_err();
+        let err = BenDecoder::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn key_only_dict() {
         let s = b"d1:ae";
-        let err = parse!(s).unwrap_err();
+        let err = BenDecoder::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn key_only_dict_2() {
         let s = b"d1:a1:a1:ae";
-        let err = parse!(s).unwrap_err();
+        let err = BenDecoder::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn dict_string_values() {
         let s = b"d1:a2:ab3:abc4:abcde";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::Dict, 1, 19, 4, 5),
@@ -387,7 +380,7 @@ mod tests {
     #[test]
     fn dict_mixed_values() {
         let s = b"d1:a1:b1:ci1e1:x1:y1:dde1:fle1:g1:he";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::Dict, 1, 35, 12, 13),
@@ -411,21 +404,21 @@ mod tests {
     #[test]
     fn empty_list() {
         let s = b"le";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(&[Token::new(TokenKind::List, 1, 1)], &tokens[..]);
     }
 
     #[test]
     fn unclosed_list() {
         let s = b"l";
-        let err = parse!(s).unwrap_err();
+        let err = BenDecoder::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn list_string_values() {
         let s = b"l1:a2:ab3:abc4:abcde";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::List, 1, 19, 4, 5),
@@ -441,7 +434,7 @@ mod tests {
     #[test]
     fn list_nested() {
         let s = b"lllleeee";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::List, 1, 7, 1, 4),
@@ -456,7 +449,7 @@ mod tests {
     #[test]
     fn list_nested_complex() {
         let s = b"ld1:ald2:ablleeeeee";
-        let tokens = parse!(s).unwrap();
+        let tokens = BenDecoder::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::List, 1, 18, 1, 8),

@@ -2,8 +2,7 @@ use ben::{node::*, *};
 
 fn main() {
     let s = b"ld1:alee1:be";
-    let p = &mut BenDecoder::new();
-    let tokens = p.parse(s).unwrap();
+    let tokens = BenDecoder::new().parse(s).unwrap();
     let node = Node::new(s, &tokens, 0);
     for item in node.list_iter() {
         if let TokenKind::Dict = item.kind() {
