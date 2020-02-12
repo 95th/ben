@@ -1,15 +1,8 @@
-use ben::{Node, NodeKind};
+use ben::Node;
 
 fn main() {
-    let s = b"ld1:alee1:be";
+    let s = b"l5:Hello5:Worlde";
     let node = Node::parse(s).unwrap();
-    for item in node.list_iter() {
-        if let NodeKind::Dict = item.kind() {
-            for (k, v) in item.dict_iter() {
-                println!("{:?} => {:?}", k, v);
-            }
-        } else {
-            println!("{:?}", item.data());
-        }
-    }
+    let list: Vec<_> = node.list_iter().map(|n| n.str_value()).collect();
+    assert_eq!(&["Hello", "World"], &list[..]);
 }

@@ -1,13 +1,20 @@
 use crate::node::NodeKind as TokenKind;
+use std::fmt;
 use std::ops::Range;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub start: i32,
     pub end: i32,
     pub children: u32,
     pub next: u32,
+}
+
+impl fmt::Debug for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}[{}:{}]", self.kind, self.start, self.end)
+    }
 }
 
 impl Token {
@@ -79,16 +86,34 @@ impl BenDecoder {
 
     /// Run Bencode parser. It parses a bencoded data string and returns a vector of tokens, each
     /// describing a single Bencode object.
-    pub fn parse(&mut self, buf: &[u8]) -> Result<Vec<Token>, Error> {
+    pub fn parse(self, buf: &[u8]) -> Result<Vec<Token>, Error> {
         let mut tokens = vec![];
         self.parse_in(buf, &mut tokens)?;
         Ok(tokens)
     }
 
+    /// Run Bencode parser. It parses a bencoded data string and returns a vector of tokens, each
+    /// describing a single Bencode object.
+    pub fn parse_prefix(self, buf: &[u8]) -> Result<(Vec<Token>, usize), Error> {
+        let mut tokens = vec![];
+        let len = self.parse_prefix_in(buf, &mut tokens)?;
+        Ok((tokens, len))
+    }
+
+    pub fn parse_in(self, buf: &[u8], tokens: &mut Vec<Token>) -> Result<(), Error> {
+        let len = self.parse_prefix_in(buf, tokens)?;
+        if len == buf.len() {
+            Ok(())
+        } else {
+            Err(Error::Invalid)
+        }
+    }
+
     /// Run Bencode parser. It parses a bencoded data string into given vector of tokens, each
     /// describing a single Bencode object.
-    pub fn parse_in(&mut self, buf: &[u8], tokens: &mut Vec<Token>) -> Result<(), Error> {
+    pub fn parse_prefix_in(mut self, buf: &[u8], tokens: &mut Vec<Token>) -> Result<usize, Error> {
         tokens.clear();
+        let mut depth = 0;
         while self.pos < buf.len() {
             let c = buf[self.pos];
             match c {
@@ -105,6 +130,7 @@ impl BenDecoder {
                     self.pos += 1;
                 }
                 b'l' => {
+                    depth += 1;
                     self.pos += 1;
                     let token = Token::new(TokenKind::List, self.pos as _, -1);
                     self.alloc_token(token, tokens)?;
@@ -112,6 +138,7 @@ impl BenDecoder {
                     self.tok_super = self.tok_next as isize - 1;
                 }
                 b'd' => {
+                    depth += 1;
                     self.pos += 1;
                     let token = Token::new(TokenKind::Dict, self.pos as _, -1);
                     self.alloc_token(token, tokens)?;
@@ -123,6 +150,7 @@ impl BenDecoder {
                     self.update_super(TokenKind::ByteStr, tokens)?;
                 }
                 b'e' => {
+                    depth -= 1;
                     let mut i = (self.tok_next - 1) as i32;
                     while i >= 0 {
                         let token = &mut tokens[i as usize];
@@ -142,7 +170,7 @@ impl BenDecoder {
                     }
 
                     while i >= 0 {
-                        let token = tokens[i as usize];
+                        let token = &tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
                             self.tok_super = i as _;
                             break;
@@ -156,6 +184,9 @@ impl BenDecoder {
                     // Unexpected char
                     return Err(Error::Invalid);
                 }
+            }
+            if depth == 0 {
+                break;
             }
         }
         for i in (0..self.tok_next).rev() {
@@ -172,7 +203,7 @@ impl BenDecoder {
                 }
             }
         }
-        Ok(())
+        Ok(self.pos)
     }
 
     fn update_super(&mut self, curr_kind: TokenKind, tokens: &mut [Token]) -> Result<(), Error> {
@@ -453,5 +484,48 @@ mod tests {
         parser.set_token_limit(3);
         let err = parser.parse(s).unwrap_err();
         assert_eq!(Error::NoMemory, err);
+    }
+
+    #[test]
+    fn multiple_root_tokens() {
+        assert_eq!(
+            Error::Invalid,
+            BenDecoder::new().parse(b"1:a1:b").unwrap_err()
+        );
+        assert_eq!(
+            Error::Invalid,
+            BenDecoder::new().parse(b"i1e1:b").unwrap_err()
+        );
+        assert_eq!(
+            Error::Invalid,
+            BenDecoder::new().parse(b"l1:aede").unwrap_err()
+        );
+        assert_eq!(
+            Error::Invalid,
+            BenDecoder::new().parse(b"lel1:ae").unwrap_err()
+        );
+    }
+
+    #[test]
+    fn parse_prefix() {
+        let s = b"lede";
+        let (tokens, len) = BenDecoder::new().parse_prefix(s).unwrap();
+        assert_eq!(
+            &[Token::with_size(TokenKind::List, 1, 1, 0, 1)],
+            &tokens[..]
+        );
+        assert_eq!(2, len);
+    }
+
+    #[test]
+    fn parse_prefix_in() {
+        let s = b"lede";
+        let mut tokens = vec![];
+        let len = BenDecoder::new().parse_prefix_in(s, &mut tokens).unwrap();
+        assert_eq!(
+            &[Token::with_size(TokenKind::List, 1, 1, 0, 1)],
+            &tokens[..]
+        );
+        assert_eq!(2, len);
     }
 }

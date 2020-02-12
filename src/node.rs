@@ -31,6 +31,38 @@ impl<'a> Node<'a> {
         Self::parse_max_tokens(buf, usize::max_value())
     }
 
+    pub fn parse_in(buf: &'a [u8], tokens: &'a mut Vec<Token>) -> crate::Result<Self> {
+        let decoder = BenDecoder::new();
+        decoder.parse_in(buf, tokens)?;
+        Ok(Self {
+            buf,
+            tokens: Cow::Borrowed(tokens),
+            idx: 0,
+        })
+    }
+
+    pub fn parse_prefix(buf: &'a [u8]) -> crate::Result<(Self, usize)> {
+        let decoder = BenDecoder::new();
+        let (tokens, len) = decoder.parse_prefix(buf)?;
+        let node = Self {
+            buf,
+            tokens: Cow::Owned(tokens),
+            idx: 0,
+        };
+        Ok((node, len))
+    }
+
+    pub fn parse_prefix_in(buf: &'a [u8], tokens: &'a mut Vec<Token>) -> crate::Result<(Self, usize)> {
+        let decoder = BenDecoder::new();
+        let len = decoder.parse_prefix_in(buf, tokens)?;
+        let node = Self {
+            buf,
+            tokens: Cow::Borrowed(tokens),
+            idx: 0,
+        };
+        Ok((node, len))
+    }
+
     pub fn parse_max_tokens(buf: &'a [u8], max_tokens: usize) -> crate::Result<Self> {
         let mut decoder = BenDecoder::new();
         decoder.set_token_limit(max_tokens);
@@ -125,7 +157,7 @@ impl<'a> Node<'a> {
         }
     }
 
-    pub fn str_value(&self) -> &str {
+    pub fn str_value(&self) -> &'a str {
         let token = &self.tokens[self.idx];
         if token.kind != NodeKind::ByteStr {
             return "";
