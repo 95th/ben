@@ -335,7 +335,7 @@ mod tests {
     fn parse_string_too_long() {
         let s = b"3:abcd";
         let err = BenDecoder::new().parse(s).unwrap_err();
-        assert_eq!(Error::Incomplete, err);
+        assert_eq!(Error::Invalid, err);
     }
 
     #[test]
