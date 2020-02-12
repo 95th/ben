@@ -142,6 +142,42 @@ impl<'a> Node<'a> {
             .find_map(|(k, v)| if k == key { Some(v) } else { None })
     }
 
+    pub fn dict_find_dict(&self, key: &[u8]) -> Option<Node<'_>> {
+        let node = self.dict_find(key)?;
+        if let NodeKind::Dict = node.kind() {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn dict_find_list(&self, key: &[u8]) -> Option<Node<'_>> {
+        let node = self.dict_find(key)?;
+        if let NodeKind::List = node.kind() {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn dict_find_str(&self, key: &[u8]) -> Option<&str> {
+        let node = self.dict_find(key)?;
+        if let NodeKind::ByteStr = node.kind() {
+            Some(node.str_value())
+        } else {
+            None
+        }
+    }
+
+    pub fn dict_find_int(&self, key: &[u8]) -> Option<i64> {
+        let node = self.dict_find(key)?;
+        if let NodeKind::Int = node.kind() {
+            Some(node.int_value())
+        } else {
+            None
+        }
+    }
+
     pub fn int_value(&self) -> i64 {
         let token = &self.tokens[self.idx];
         if token.kind != NodeKind::Int {
