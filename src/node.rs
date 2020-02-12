@@ -1,35 +1,57 @@
-use crate::{Token, TokenKind};
-use core::fmt;
+use crate::parse::{BenDecoder, Token};
+use std::borrow::Cow;
+use std::fmt;
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum NodeKind {
+    Dict,
+    List,
+    ByteStr,
+    Int,
+}
 
 #[derive(PartialEq)]
 pub struct Node<'a> {
     buf: &'a [u8],
-    tokens: &'a [Token],
+    tokens: Cow<'a, [Token]>,
     idx: usize,
 }
 
 impl fmt::Debug for Node<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Node").field("idx", &self.idx).finish()
+        f.debug_struct("Node")
+            .field("idx", &self.idx)
+            .field("token", &self.tokens[self.idx])
+            .finish()
     }
 }
 
 impl<'a> Node<'a> {
-    pub fn new(buf: &'a [u8], tokens: &'a [Token], idx: usize) -> Self {
-        Self { buf, tokens, idx }
+    pub fn parse(buf: &'a [u8]) -> crate::Result<Self> {
+        Self::parse_max_tokens(buf, usize::max_value())
+    }
+
+    pub fn parse_max_tokens(buf: &'a [u8], max_tokens: usize) -> crate::Result<Self> {
+        let mut decoder = BenDecoder::new();
+        decoder.set_token_limit(max_tokens);
+        Ok(Self {
+            buf,
+            tokens: Cow::Owned(decoder.parse(buf)?),
+            idx: 0,
+        })
     }
 
     pub fn data(&self) -> &'a [u8] {
         &self.buf[self.tokens[self.idx].range()]
     }
 
-    pub fn kind(&self) -> TokenKind {
+    pub fn kind(&self) -> NodeKind {
         self.tokens[self.idx].kind
     }
 
-    pub fn list_at(&self, i: usize) -> Option<Node<'a>> {
+    pub fn list_at(&self, i: usize) -> Option<Node<'_>> {
         let token = self.tokens.get(self.idx)?;
-        if token.kind != TokenKind::List {
+        if token.kind != NodeKind::List {
             return None;
         }
 
@@ -45,13 +67,17 @@ impl<'a> Node<'a> {
             item += 1;
         }
 
-        Some(Node { idx, ..*self })
+        Some(Node {
+            idx,
+            tokens: Cow::Borrowed(&self.tokens),
+            ..*self
+        })
     }
 
     pub fn list_iter(&self) -> ListIter<'_> {
         let token = &self.tokens[self.idx];
         let pos = match token.kind {
-            TokenKind::List => 0,
+            NodeKind::List => 0,
             _ => token.children as usize,
         };
         ListIter {
@@ -65,7 +91,7 @@ impl<'a> Node<'a> {
     pub fn dict_iter(&self) -> DictIter<'_> {
         let token = &self.tokens[self.idx];
         let pos = match token.kind {
-            TokenKind::Dict => 0,
+            NodeKind::Dict => 0,
             _ => token.children as usize,
         };
         DictIter {
@@ -78,7 +104,7 @@ impl<'a> Node<'a> {
 
     pub fn int_value(&self) -> i64 {
         let token = &self.tokens[self.idx];
-        if token.kind != TokenKind::Int {
+        if token.kind != NodeKind::Int {
             return 0;
         }
         let mut val = 0;
@@ -101,11 +127,11 @@ impl<'a> Node<'a> {
 
     pub fn str_value(&self) -> &str {
         let token = &self.tokens[self.idx];
-        if token.kind != TokenKind::ByteStr {
+        if token.kind != NodeKind::ByteStr {
             return "";
         }
         let bytes = &self.buf[token.range()];
-        core::str::from_utf8(bytes).unwrap_or_default()
+        std::str::from_utf8(bytes).unwrap_or_default()
     }
 }
 
@@ -128,7 +154,11 @@ impl<'a> Iterator for ListIter<'a> {
         self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
         self.pos += 1;
 
-        Some(Node { idx, ..*self.node })
+        Some(Node {
+            idx,
+            tokens: Cow::Borrowed(&self.node.tokens),
+            ..*self.node
+        })
     }
 }
 
@@ -150,7 +180,7 @@ impl<'a> Iterator for DictIter<'a> {
         debug_assert!(self.token_idx < self.node.tokens.len());
         let key_idx = self.token_idx;
 
-        debug_assert_eq!(TokenKind::ByteStr, self.node.tokens[key_idx].kind);
+        debug_assert_eq!(NodeKind::ByteStr, self.node.tokens[key_idx].kind);
         self.token_idx += self.node.tokens.get(self.token_idx)?.next as usize;
 
         debug_assert!(self.token_idx < self.node.tokens.len());
@@ -162,11 +192,13 @@ impl<'a> Iterator for DictIter<'a> {
         Some((
             Node {
                 idx: key_idx,
+                tokens: Cow::Borrowed(&self.node.tokens),
                 ..*self.node
             }
             .data(),
             Node {
                 idx: val_idx,
+                tokens: Cow::Borrowed(&self.node.tokens),
                 ..*self.node
             },
         ))
@@ -176,13 +208,12 @@ impl<'a> Iterator for DictIter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::*;
+    use crate::parse::*;
 
     #[test]
     fn list_at() {
         let s = b"ld1:alee1:be";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         let n = node.list_at(1).unwrap();
         assert_eq!(b"b", n.data());
     }
@@ -190,8 +221,7 @@ mod tests {
     #[test]
     fn list_at_nested() {
         let s = b"l1:ad1:al1:aee1:be";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         assert_eq!(b"a", node.list_at(0).unwrap().data());
         assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
         assert_eq!(b"b", node.list_at(2).unwrap().data());
@@ -201,8 +231,8 @@ mod tests {
     #[test]
     fn list_at_overflow() {
         let s = b"l1:al1:ad1:al1:aee1:be1:be";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 2);
+        let node = Node::parse(s).unwrap();
+        let node = node.list_at(1).unwrap();
         assert_eq!(b"a", node.list_at(0).unwrap().data());
         assert_eq!(b"1:al1:ae", node.list_at(1).unwrap().data());
         assert_eq!(b"b", node.list_at(2).unwrap().data());
@@ -212,8 +242,7 @@ mod tests {
     #[test]
     fn list_iter() {
         let s = b"l1:ad1:al1:aee1:be";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         let mut iter = node.list_iter();
         assert_eq!(b"a", iter.next().unwrap().data());
         assert_eq!(b"1:al1:ae", iter.next().unwrap().data());
@@ -224,8 +253,7 @@ mod tests {
     #[test]
     fn list_iter_not_a_list() {
         let s = b"de";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         let mut iter = node.list_iter();
         assert_eq!(None, iter.next());
     }
@@ -233,8 +261,7 @@ mod tests {
     #[test]
     fn dict_iter() {
         let s = b"d1:a2:bc3:def4:ghije";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         let mut iter = node.dict_iter();
 
         let (k, v) = iter.next().unwrap();
@@ -251,8 +278,7 @@ mod tests {
     #[test]
     fn dict_iter_2() {
         let s = b"d1:alee";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         let mut iter = node.dict_iter();
 
         let (k, v) = iter.next().unwrap();
@@ -265,8 +291,7 @@ mod tests {
     #[test]
     fn dict_iter_inside_list() {
         let s = b"ld1:alee1:a1:ae";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         let mut list_iter = node.list_iter();
 
         let dict = list_iter.next().unwrap();
@@ -286,16 +311,14 @@ mod tests {
     #[test]
     fn int_value() {
         let s = b"i12e";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         assert_eq!(12, node.int_value());
     }
 
     #[test]
     fn int_value_negative() {
         let s = b"i-12e";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         assert_eq!(-12, node.int_value());
     }
 
@@ -309,8 +332,7 @@ mod tests {
     #[test]
     fn str_value() {
         let s = b"5:abcde";
-        let tokens = BenDecoder::new().parse(s).unwrap();
-        let node = Node::new(s, &tokens, 0);
+        let node = Node::parse(s).unwrap();
         assert_eq!("abcde", node.str_value());
     }
 }

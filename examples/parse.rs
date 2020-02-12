@@ -1,7 +1,7 @@
-use ben::BenDecoder;
+use ben::{Node, NodeKind};
 
 fn main() {
     let s = b"ld1:alee1:be";
-    let tokens = BenDecoder::new().parse(s).unwrap();
-    assert_eq!(5, tokens.len());
+    let tokens = Node::parse(s).unwrap();
+    assert_eq!(NodeKind::List, tokens.kind());
 }
