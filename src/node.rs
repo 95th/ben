@@ -84,6 +84,22 @@ impl<'a> Node<'a> {
         self.tokens[self.idx].kind
     }
 
+    pub fn is_list(&self) -> bool {
+        self.kind() == NodeKind::List
+    }
+
+    pub fn is_dict(&self) -> bool {
+        self.kind() == NodeKind::Dict
+    }
+
+    pub fn is_str(&self) -> bool {
+        self.kind() == NodeKind::ByteStr
+    }
+
+    pub fn is_int(&self) -> bool {
+        self.kind() == NodeKind::Int
+    }
+
     pub fn list_at(&self, i: usize) -> Option<Node<'_>> {
         let token = self.tokens.get(self.idx)?;
         if token.kind != NodeKind::List {
