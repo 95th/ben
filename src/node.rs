@@ -52,7 +52,10 @@ impl<'a> Node<'a> {
         Ok((node, len))
     }
 
-    pub fn parse_prefix_in(buf: &'a [u8], tokens: &'a mut Vec<Token>) -> crate::Result<(Self, usize)> {
+    pub fn parse_prefix_in(
+        buf: &'a [u8],
+        tokens: &'a mut Vec<Token>,
+    ) -> crate::Result<(Self, usize)> {
         let decoder = BenDecoder::new();
         let len = decoder.parse_prefix_in(buf, tokens)?;
         let node = Self {
@@ -132,6 +135,11 @@ impl<'a> Node<'a> {
             token_idx: self.idx + 1,
             pos,
         }
+    }
+
+    pub fn dict_find(&self, key: &[u8]) -> Option<Node<'_>> {
+        self.dict_iter()
+            .find_map(|(k, v)| if k == key { Some(v) } else { None })
     }
 
     pub fn int_value(&self) -> i64 {
@@ -366,5 +374,13 @@ mod tests {
         let s = b"5:abcde";
         let node = Node::parse(s).unwrap();
         assert_eq!("abcde", node.str_value());
+    }
+
+    #[test]
+    fn dict_find() {
+        let s = b"d1:ai1e1:bi2ee";
+        let node = Node::parse(s).unwrap();
+        let b = node.dict_find(b"b").unwrap();
+        assert_eq!(2, b.int_value());
     }
 }
