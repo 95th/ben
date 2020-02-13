@@ -276,8 +276,32 @@ impl<'a> Dict<'a> {
         }
     }
 
-    pub fn get(&self, key: &[u8]) -> Option<Node<'_>> {
+    pub fn get(&self, key: &[u8]) -> Option<Node<'a>> {
         self.iter().find(|(k, _)| *k == key).map(|(_, v)| v)
+    }
+
+    pub fn get_dict(&self, key: &[u8]) -> Option<Dict<'a>> {
+        Some(Dict {
+            buf: self.buf,
+            idx: self.get(key)?.idx,
+            tokens: self.tokens,
+        })
+    }
+
+    pub fn get_list(&self, key: &[u8]) -> Option<List<'a>> {
+        Some(List {
+            buf: self.buf,
+            idx: self.get(key)?.idx,
+            tokens: self.tokens,
+        })
+    }
+
+    pub fn get_str(&self, key: &[u8]) -> &str {
+        self.get(key).map(|s| s.as_str()).unwrap_or_default()
+    }
+
+    pub fn get_int(&self, key: &[u8]) -> i64 {
+        self.get(key).map(|n| n.as_int()).unwrap_or_default()
     }
 }
 
