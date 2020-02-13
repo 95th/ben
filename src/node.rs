@@ -124,10 +124,10 @@ impl<'a> Node<'a> {
         }
     }
 
-    pub fn as_int(&self) -> i64 {
+    pub fn as_int(&self) -> Option<i64> {
         let token = &self.tokens[self.idx];
         if token.kind != NodeKind::Int {
-            return 0;
+            return None;
         }
         let mut val = 0;
         let mut negative = false;
@@ -141,19 +141,19 @@ impl<'a> Node<'a> {
             val += digit;
         }
         if negative {
-            -val
+            Some(-val)
         } else {
-            val
+            Some(val)
         }
     }
 
-    pub fn as_str(&self) -> &'a str {
+    pub fn as_str(&self) -> Option<&'a str> {
         let token = &self.tokens[self.idx];
         if token.kind != NodeKind::ByteStr {
-            return "";
+            return None;
         }
         let bytes = &self.buf[token.range()];
-        std::str::from_utf8(bytes).unwrap_or_default()
+        std::str::from_utf8(bytes).ok()
     }
 }
 
@@ -218,12 +218,12 @@ impl<'a> List<'a> {
         })
     }
 
-    pub fn get_str(&self, i: usize) -> &str {
-        self.get(i).map(|s| s.as_str()).unwrap_or_default()
+    pub fn get_str(&self, i: usize) -> Option<&str> {
+        self.get(i).and_then(|s| s.as_str())
     }
 
-    pub fn get_int(&self, i: usize) -> i64 {
-        self.get(i).map(|n| n.as_int()).unwrap_or_default()
+    pub fn get_int(&self, i: usize) -> Option<i64> {
+        self.get(i).and_then(|n| n.as_int())
     }
 }
 
@@ -296,12 +296,12 @@ impl<'a> Dict<'a> {
         })
     }
 
-    pub fn get_str(&self, key: &[u8]) -> &str {
-        self.get(key).map(|s| s.as_str()).unwrap_or_default()
+    pub fn get_str(&self, key: &[u8]) -> Option<&str> {
+        self.get(key).and_then(|s| s.as_str())
     }
 
-    pub fn get_int(&self, key: &[u8]) -> i64 {
-        self.get(key).map(|n| n.as_int()).unwrap_or_default()
+    pub fn get_int(&self, key: &[u8]) -> Option<i64> {
+        self.get(key).and_then(|n| n.as_int())
     }
 }
 
@@ -457,14 +457,14 @@ mod tests {
     fn int_value() {
         let s = b"i12e";
         let node = Node::parse(s).unwrap();
-        assert_eq!(12, node.as_int());
+        assert_eq!(12, node.as_int().unwrap());
     }
 
     #[test]
     fn int_value_negative() {
         let s = b"i-12e";
         let node = Node::parse(s).unwrap();
-        assert_eq!(-12, node.as_int());
+        assert_eq!(-12, node.as_int().unwrap());
     }
 
     #[test]
@@ -478,7 +478,7 @@ mod tests {
     fn str_value() {
         let s = b"5:abcde";
         let node = Node::parse(s).unwrap();
-        assert_eq!("abcde", node.as_str());
+        assert_eq!("abcde", node.as_str().unwrap());
     }
 
     #[test]
@@ -487,6 +487,6 @@ mod tests {
         let node = Node::parse(s).unwrap();
         let dict = node.as_dict().unwrap();
         let b = dict.get(b"b").unwrap();
-        assert_eq!(2, b.as_int());
+        assert_eq!(2, b.as_int().unwrap());
     }
 }
