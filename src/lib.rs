@@ -5,7 +5,7 @@
 mod node;
 mod parse;
 
-pub use node::{Node, NodeKind};
+pub use node::Node;
 pub use parse::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;

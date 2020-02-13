@@ -80,7 +80,7 @@ impl<'a> Node<'a> {
         &self.buf[self.tokens[self.idx].range()]
     }
 
-    pub fn kind(&self) -> NodeKind {
+    fn kind(&self) -> NodeKind {
         self.tokens[self.idx].kind
     }
 
