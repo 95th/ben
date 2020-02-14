@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::io::{self, BufWriter, Write};
+use std::io::{self, Write};
 
 #[derive(Debug, Clone, PartialOrd, PartialEq)]
 pub enum Node {
@@ -17,7 +17,6 @@ impl Node {
     }
 
     pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        let mut w = BufWriter::new(w);
         enum Token<'a> {
             B(&'a Node),
             S(&'a str),
