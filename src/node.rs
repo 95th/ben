@@ -263,17 +263,15 @@ impl<'a> Node<'a> {
         for &c in &self.buf[token.range()] {
             if c == b'-' {
                 negative = true;
-                continue;
+            } else {
+                let digit = (c - b'0') as i64;
+                val = (val * 10) + digit;
             }
-            val *= 10;
-            let digit = (c - b'0') as i64;
-            val += digit;
         }
         if negative {
-            Some(-val)
-        } else {
-            Some(val)
-        }
+            val *= -1
+        };
+        Some(val)
     }
 
     /// Return this node as a `i64`.
@@ -290,11 +288,12 @@ impl<'a> Node<'a> {
     /// ```
     pub fn as_str(&self) -> Option<&'a str> {
         let token = &self.tokens[self.idx];
-        if token.kind != NodeKind::ByteStr {
+        if let NodeKind::ByteStr = token.kind {
+            let bytes = &self.buf[token.range()];
+            std::str::from_utf8(bytes).ok()
+        } else {
             return None;
         }
-        let bytes = &self.buf[token.range()];
-        std::str::from_utf8(bytes).ok()
     }
 }
 
