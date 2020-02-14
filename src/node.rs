@@ -27,10 +27,34 @@ impl fmt::Debug for Node<'_> {
 }
 
 impl<'a> Node<'a> {
+    /// Parse given bencoded bytes.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let bytes = b"11:Hello World";
+    ///     let node = Node::parse(bytes).unwrap();
+    ///     assert_eq!("Hello World", node.as_str().unwrap());
+    /// ```
     pub fn parse(buf: &'a [u8]) -> crate::Result<Self> {
         Self::parse_max_tokens(buf, usize::max_value())
     }
 
+    /// Parse given bencoded bytes using a given token buffer.
+    /// It helps you reuse the buffer next time.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let mut v = vec![];
+    ///     let values: &[&[u8]] = &[b"5:Hello", b"5:World"];
+    ///     for bytes in values {
+    ///         let node = Node::parse_in(bytes, &mut v).unwrap();
+    ///         assert!(node.is_str());
+    ///     }
+    /// ```
     pub fn parse_in(buf: &'a [u8], tokens: &'a mut Vec<Token>) -> crate::Result<Self> {
         let decoder = BenDecoder::new();
         decoder.parse_in(buf, tokens)?;
@@ -41,6 +65,18 @@ impl<'a> Node<'a> {
         })
     }
 
+    /// Parse given bencoded bytes from the beginning and returns
+    /// index where one root object is parsed successfully.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let bytes = b"5:Hello World";
+    ///     let (node, i) = Node::parse_prefix(bytes).unwrap();
+    ///     assert_eq!("Hello", node.as_str().unwrap());
+    ///     assert_eq!(b" World", &bytes[i..]);
+    /// ```
     pub fn parse_prefix(buf: &'a [u8]) -> crate::Result<(Self, usize)> {
         let decoder = BenDecoder::new();
         let (tokens, len) = decoder.parse_prefix(buf)?;
@@ -52,6 +88,21 @@ impl<'a> Node<'a> {
         Ok((node, len))
     }
 
+    /// Parse given bencoded bytes from the beginning and returns
+    /// index where one root object is parsed successfully. It accepts
+    /// a token buffer argument which helps reuse the buffer next time.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let mut v = vec![];
+    ///     let values: &[&[u8]] = &[b"5:Hello World", b"1:ade"];
+    ///     for bytes in values {
+    ///         let (node, i) = Node::parse_prefix_in(bytes, &mut v).unwrap();
+    ///         assert!(node.is_str());
+    ///     }
+    /// ```
     pub fn parse_prefix_in(
         buf: &'a [u8],
         tokens: &'a mut Vec<Token>,
@@ -66,6 +117,17 @@ impl<'a> Node<'a> {
         Ok((node, len))
     }
 
+    /// Parse given bencoded bytes with limit on maximum number of
+    /// tokens that can be parsed.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::{Node, Error};
+    ///
+    ///     let bytes = b"l1:a2:bce";
+    ///     let err = Node::parse_max_tokens(bytes, 2).unwrap_err();
+    ///     assert_eq!(Error::NoMemory, err);
+    /// ```
     pub fn parse_max_tokens(buf: &'a [u8], max_tokens: usize) -> crate::Result<Self> {
         let mut decoder = BenDecoder::new();
         decoder.set_token_limit(max_tokens);
@@ -76,6 +138,16 @@ impl<'a> Node<'a> {
         })
     }
 
+    /// Returns raw bytes inside this node.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let bytes = b"l1:a2:bce";
+    ///     let node = Node::parse(bytes).unwrap();
+    ///     assert_eq!(b"1:a2:bc", node.data());
+    /// ```
     pub fn data(&self) -> &'a [u8] {
         &self.buf[self.tokens[self.idx].range()]
     }
@@ -84,22 +156,39 @@ impl<'a> Node<'a> {
         self.tokens[self.idx].kind
     }
 
+    /// Returns true if this node is a list.
     pub fn is_list(&self) -> bool {
         self.kind() == NodeKind::List
     }
 
+    /// Returns true if this node is a dictionary.
     pub fn is_dict(&self) -> bool {
         self.kind() == NodeKind::Dict
     }
 
+    /// Returns true if this node is a string.
     pub fn is_str(&self) -> bool {
         self.kind() == NodeKind::ByteStr
     }
 
+    /// Returns true if this node is a integer.
     pub fn is_int(&self) -> bool {
         self.kind() == NodeKind::Int
     }
 
+    /// Return this node as a `List` which provides further
+    /// list operations such as `get`, `iter` etc.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let bytes = b"l1:a2:bce";
+    ///     let node = Node::parse(bytes).unwrap();
+    ///     let list = node.as_list().unwrap();
+    ///     assert_eq!("a", list.get_str(0).unwrap());
+    ///     assert_eq!("bc", list.get_str(1).unwrap());
+    /// ```
     pub fn as_list(&self) -> Option<List<'_>> {
         if self.is_list() {
             Some(List {
@@ -112,6 +201,18 @@ impl<'a> Node<'a> {
         }
     }
 
+    /// Return this node as a `Dict` which provides further
+    /// dictionary operations such as `get`, `iter` etc.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let bytes = b"d1:a2:bce";
+    ///     let node = Node::parse(bytes).unwrap();
+    ///     let dict = node.as_dict().unwrap();
+    ///     assert_eq!("bc", dict.get_str(b"a").unwrap());
+    /// ```
     pub fn as_dict(&self) -> Option<Dict<'_>> {
         if self.is_dict() {
             Some(Dict {
@@ -124,6 +225,16 @@ impl<'a> Node<'a> {
         }
     }
 
+    /// Return this node as a `i64`.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let bytes = b"i123e";
+    ///     let node = Node::parse(bytes).unwrap();
+    ///     assert_eq!(123, node.as_int().unwrap());
+    /// ```
     pub fn as_int(&self) -> Option<i64> {
         let token = &self.tokens[self.idx];
         if token.kind != NodeKind::Int {
@@ -147,6 +258,16 @@ impl<'a> Node<'a> {
         }
     }
 
+    /// Return this node as a `i64`.
+    ///
+    /// **Example:**
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let bytes = b"3:abc";
+    ///     let node = Node::parse(bytes).unwrap();
+    ///     assert_eq!("abc", node.as_str().unwrap());
+    /// ```
     pub fn as_str(&self) -> Option<&'a str> {
         let token = &self.tokens[self.idx];
         if token.kind != NodeKind::ByteStr {
@@ -157,6 +278,7 @@ impl<'a> Node<'a> {
     }
 }
 
+/// A bencode list
 pub struct List<'a> {
     buf: &'a [u8],
     tokens: &'a [Token],
@@ -255,6 +377,7 @@ impl<'a> Iterator for ListIter<'a> {
     }
 }
 
+/// A bencode dictionary
 pub struct Dict<'a> {
     buf: &'a [u8],
     tokens: &'a [Token],
