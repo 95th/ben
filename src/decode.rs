@@ -1,14 +1,7 @@
+use crate::parse::TokenKind;
 use crate::parse::{BenDecoder, Token};
 use std::borrow::Cow;
 use std::fmt;
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum NodeKind {
-    Dict,
-    List,
-    ByteStr,
-    Int,
-}
 
 #[derive(PartialEq)]
 pub struct Node<'a> {
@@ -164,28 +157,28 @@ impl<'a> Node<'a> {
         &self.buf[self.tokens[self.idx].range()]
     }
 
-    fn kind(&self) -> NodeKind {
+    fn kind(&self) -> TokenKind {
         self.tokens[self.idx].kind
     }
 
     /// Returns true if this node is a list.
     pub fn is_list(&self) -> bool {
-        self.kind() == NodeKind::List
+        self.kind() == TokenKind::List
     }
 
     /// Returns true if this node is a dictionary.
     pub fn is_dict(&self) -> bool {
-        self.kind() == NodeKind::Dict
+        self.kind() == TokenKind::Dict
     }
 
     /// Returns true if this node is a string.
     pub fn is_str(&self) -> bool {
-        self.kind() == NodeKind::ByteStr
+        self.kind() == TokenKind::ByteStr
     }
 
     /// Returns true if this node is a integer.
     pub fn is_int(&self) -> bool {
-        self.kind() == NodeKind::Int
+        self.kind() == TokenKind::Int
     }
 
     /// Return this node as a `List` which provides further
@@ -255,7 +248,7 @@ impl<'a> Node<'a> {
     /// ```
     pub fn as_int(&self) -> Option<i64> {
         let token = &self.tokens[self.idx];
-        if token.kind != NodeKind::Int {
+        if token.kind != TokenKind::Int {
             return None;
         }
         let mut val = 0;
@@ -288,7 +281,7 @@ impl<'a> Node<'a> {
     /// ```
     pub fn as_str(&self) -> Option<&'a str> {
         let token = &self.tokens[self.idx];
-        if let NodeKind::ByteStr = token.kind {
+        if let TokenKind::ByteStr = token.kind {
             let bytes = &self.buf[token.range()];
             std::str::from_utf8(bytes).ok()
         } else {
@@ -470,7 +463,7 @@ impl<'a> Iterator for DictIter<'a> {
         debug_assert!(self.token_idx < self.tokens.len());
         let key_idx = self.token_idx;
 
-        debug_assert_eq!(NodeKind::ByteStr, self.tokens[key_idx].kind);
+        debug_assert_eq!(TokenKind::ByteStr, self.tokens[key_idx].kind);
         self.token_idx += self.tokens.get(self.token_idx)?.next as usize;
 
         debug_assert!(self.token_idx < self.tokens.len());

@@ -1,6 +1,13 @@
-use crate::node::NodeKind as TokenKind;
 use std::fmt;
 use std::ops::Range;
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum TokenKind {
+    Dict,
+    List,
+    ByteStr,
+    Int,
+}
 
 #[derive(Clone, PartialEq)]
 pub struct Token {
