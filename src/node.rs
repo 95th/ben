@@ -29,7 +29,9 @@ impl fmt::Debug for Node<'_> {
 impl<'a> Node<'a> {
     /// Parse given bencoded bytes.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -44,7 +46,9 @@ impl<'a> Node<'a> {
     /// Parse given bencoded bytes using a given token buffer.
     /// It helps you reuse the buffer next time.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -68,7 +72,9 @@ impl<'a> Node<'a> {
     /// Parse given bencoded bytes from the beginning and returns
     /// index where one root object is parsed successfully.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -92,7 +98,9 @@ impl<'a> Node<'a> {
     /// index where one root object is parsed successfully. It accepts
     /// a token buffer argument which helps reuse the buffer next time.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -120,7 +128,9 @@ impl<'a> Node<'a> {
     /// Parse given bencoded bytes with limit on maximum number of
     /// tokens that can be parsed.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::{Node, Error};
     ///
@@ -140,7 +150,9 @@ impl<'a> Node<'a> {
 
     /// Returns raw bytes inside this node.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -179,7 +191,9 @@ impl<'a> Node<'a> {
     /// Return this node as a `List` which provides further
     /// list operations such as `get`, `iter` etc.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -204,7 +218,9 @@ impl<'a> Node<'a> {
     /// Return this node as a `Dict` which provides further
     /// dictionary operations such as `get`, `iter` etc.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -227,7 +243,9 @@ impl<'a> Node<'a> {
 
     /// Return this node as a `i64`.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -260,7 +278,9 @@ impl<'a> Node<'a> {
 
     /// Return this node as a `i64`.
     ///
-    /// **Example:**
+    /// # Examples
+    ///
+    /// Basic usage:
     /// ```
     ///     use ben::Node;
     ///
@@ -286,10 +306,7 @@ pub struct List<'a> {
 }
 
 impl<'a> List<'a> {
-    pub fn data(&self) -> &'a [u8] {
-        &self.buf[self.tokens[self.idx].range()]
-    }
-
+    /// Gets an iterator over the entries of the list
     pub fn iter(&self) -> ListIter<'a> {
         ListIter {
             buf: self.buf,
@@ -298,6 +315,43 @@ impl<'a> List<'a> {
             token_idx: self.idx + 1,
             pos: 0,
         }
+    }
+
+    /// Returns the `Node` at the given index.
+    pub fn get(&self, i: usize) -> Option<Node<'a>> {
+        Some(Node {
+            buf: self.buf,
+            idx: self.find_idx(i)?,
+            tokens: Cow::Borrowed(self.tokens),
+        })
+    }
+
+    /// Returns the `Dict` at the given index.
+    pub fn get_dict(&self, i: usize) -> Option<Dict<'_>> {
+        Some(Dict {
+            buf: self.buf,
+            idx: self.find_idx(i)?,
+            tokens: self.tokens,
+        })
+    }
+
+    /// Returns the `List` at the given index.
+    pub fn get_list(&self, i: usize) -> Option<List<'_>> {
+        Some(List {
+            buf: self.buf,
+            idx: self.find_idx(i)?,
+            tokens: self.tokens,
+        })
+    }
+
+    /// Returns the `str` at the given index.
+    pub fn get_str(&self, i: usize) -> Option<&str> {
+        self.get(i)?.as_str()
+    }
+
+    /// Returns the `i64` at the given index.
+    pub fn get_int(&self, i: usize) -> Option<i64> {
+        self.get(i)?.as_int()
     }
 
     fn find_idx(&self, i: usize) -> Option<usize> {
@@ -314,38 +368,6 @@ impl<'a> List<'a> {
         }
 
         Some(idx)
-    }
-
-    pub fn get(&self, i: usize) -> Option<Node<'a>> {
-        Some(Node {
-            buf: self.buf,
-            idx: self.find_idx(i)?,
-            tokens: Cow::Borrowed(self.tokens),
-        })
-    }
-
-    pub fn get_dict(&self, i: usize) -> Option<Dict<'_>> {
-        Some(Dict {
-            buf: self.buf,
-            idx: self.find_idx(i)?,
-            tokens: self.tokens,
-        })
-    }
-
-    pub fn get_list(&self, i: usize) -> Option<List<'_>> {
-        Some(List {
-            buf: self.buf,
-            idx: self.find_idx(i)?,
-            tokens: self.tokens,
-        })
-    }
-
-    pub fn get_str(&self, i: usize) -> Option<&str> {
-        self.get(i).and_then(|s| s.as_str())
-    }
-
-    pub fn get_int(&self, i: usize) -> Option<i64> {
-        self.get(i).and_then(|n| n.as_int())
     }
 }
 
@@ -385,10 +407,7 @@ pub struct Dict<'a> {
 }
 
 impl<'a> Dict<'a> {
-    pub fn data(&self) -> &'a [u8] {
-        &self.buf[self.tokens[self.idx].range()]
-    }
-
+    /// Gets an iterator over the entries of the dictionary.
     pub fn iter(&self) -> DictIter<'a> {
         DictIter {
             buf: self.buf,
@@ -399,10 +418,12 @@ impl<'a> Dict<'a> {
         }
     }
 
+    /// Returns the `Node` for the given key.
     pub fn get(&self, key: &[u8]) -> Option<Node<'a>> {
         self.iter().find(|(k, _)| *k == key).map(|(_, v)| v)
     }
 
+    /// Returns the `Dict` for the given key.
     pub fn get_dict(&self, key: &[u8]) -> Option<Dict<'a>> {
         Some(Dict {
             buf: self.buf,
@@ -411,6 +432,7 @@ impl<'a> Dict<'a> {
         })
     }
 
+    /// Returns the `List` for the given key.
     pub fn get_list(&self, key: &[u8]) -> Option<List<'a>> {
         Some(List {
             buf: self.buf,
@@ -419,12 +441,14 @@ impl<'a> Dict<'a> {
         })
     }
 
+    /// Returns the `str` for the given key.
     pub fn get_str(&self, key: &[u8]) -> Option<&str> {
-        self.get(key).and_then(|s| s.as_str())
+        self.get(key)?.as_str()
     }
 
+    /// Returns the `i64` for the given key.
     pub fn get_int(&self, key: &[u8]) -> Option<i64> {
-        self.get(key).and_then(|n| n.as_int())
+        self.get(key)?.as_int()
     }
 }
 
