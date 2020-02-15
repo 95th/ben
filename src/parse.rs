@@ -138,16 +138,16 @@ impl Parser {
                 }
                 b'l' => {
                     depth += 1;
-                    self.pos += 1;
                     let token = Token::new(TokenKind::List, self.pos as _, -1);
+                    self.pos += 1;
                     self.alloc_token(token, tokens)?;
                     self.update_super(TokenKind::List, tokens)?;
                     self.tok_super = self.tok_next as isize - 1;
                 }
                 b'd' => {
                     depth += 1;
-                    self.pos += 1;
                     let token = Token::new(TokenKind::Dict, self.pos as _, -1);
+                    self.pos += 1;
                     self.alloc_token(token, tokens)?;
                     self.update_super(TokenKind::Dict, tokens)?;
                     self.tok_super = self.tok_next as isize - 1;
@@ -157,6 +157,7 @@ impl Parser {
                     self.update_super(TokenKind::ByteStr, tokens)?;
                 }
                 b'e' => {
+                    self.pos += 1;
                     depth -= 1;
                     let mut i = (self.tok_next - 1) as i32;
                     while i >= 0 {
@@ -185,7 +186,6 @@ impl Parser {
                             i -= 1
                         }
                     }
-                    self.pos += 1;
                 }
                 _ => {
                     // Unexpected char
@@ -356,7 +356,7 @@ mod tests {
     fn empty_dict() {
         let s = b"de";
         let tokens = Parser::new().parse(s).unwrap();
-        assert_eq!(&[Token::new(TokenKind::Dict, 1, 1)], &tokens[..]);
+        assert_eq!(&[Token::new(TokenKind::Dict, 0, 2)], &tokens[..]);
     }
 
     #[test]
@@ -386,7 +386,7 @@ mod tests {
         let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::Dict, 1, 19, 4, 5),
+                Token::with_size(TokenKind::Dict, 0, 20, 4, 5),
                 Token::with_size(TokenKind::ByteStr, 3, 4, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 6, 8, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 10, 13, 0, 1),
@@ -402,7 +402,7 @@ mod tests {
         let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::Dict, 1, 35, 12, 13),
+                Token::with_size(TokenKind::Dict, 0, 36, 12, 13),
                 Token::with_size(TokenKind::ByteStr, 3, 4, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 6, 7, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 9, 10, 0, 1),
@@ -410,9 +410,9 @@ mod tests {
                 Token::with_size(TokenKind::ByteStr, 15, 16, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 18, 19, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 21, 22, 0, 1),
-                Token::with_size(TokenKind::Dict, 23, 23, 0, 1),
+                Token::with_size(TokenKind::Dict, 22, 24, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 26, 27, 0, 1),
-                Token::with_size(TokenKind::List, 28, 28, 0, 1),
+                Token::with_size(TokenKind::List, 27, 29, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 31, 32, 0, 1),
                 Token::with_size(TokenKind::ByteStr, 34, 35, 0, 1)
             ],
@@ -424,7 +424,7 @@ mod tests {
     fn empty_list() {
         let s = b"le";
         let tokens = Parser::new().parse(s).unwrap();
-        assert_eq!(&[Token::new(TokenKind::List, 1, 1)], &tokens[..]);
+        assert_eq!(&[Token::new(TokenKind::List, 0, 2)], &tokens[..]);
     }
 
     #[test]
@@ -440,7 +440,7 @@ mod tests {
         let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::List, 1, 19, 4, 5),
+                Token::with_size(TokenKind::List, 0, 20, 4, 5),
                 Token::new(TokenKind::ByteStr, 3, 4),
                 Token::new(TokenKind::ByteStr, 6, 8,),
                 Token::new(TokenKind::ByteStr, 10, 13,),
@@ -456,10 +456,10 @@ mod tests {
         let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::List, 1, 7, 1, 4),
-                Token::with_size(TokenKind::List, 2, 6, 1, 3),
-                Token::with_size(TokenKind::List, 3, 5, 1, 2),
-                Token::with_size(TokenKind::List, 4, 4, 0, 1),
+                Token::with_size(TokenKind::List, 0, 8, 1, 4),
+                Token::with_size(TokenKind::List, 1, 7, 1, 3),
+                Token::with_size(TokenKind::List, 2, 6, 1, 2),
+                Token::with_size(TokenKind::List, 3, 5, 0, 1),
             ],
             &tokens[..]
         );
@@ -471,14 +471,14 @@ mod tests {
         let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
-                Token::with_size(TokenKind::List, 1, 18, 1, 8),
-                Token::with_size(TokenKind::Dict, 2, 17, 2, 7),
+                Token::with_size(TokenKind::List, 0, 19, 1, 8),
+                Token::with_size(TokenKind::Dict, 1, 18, 2, 7),
                 Token::with_size(TokenKind::ByteStr, 4, 5, 0, 1),
-                Token::with_size(TokenKind::List, 6, 16, 1, 5),
-                Token::with_size(TokenKind::Dict, 7, 15, 2, 4),
+                Token::with_size(TokenKind::List, 5, 17, 1, 5),
+                Token::with_size(TokenKind::Dict, 6, 16, 2, 4),
                 Token::with_size(TokenKind::ByteStr, 9, 11, 0, 1),
-                Token::with_size(TokenKind::List, 12, 14, 1, 2),
-                Token::with_size(TokenKind::List, 13, 13, 0, 1),
+                Token::with_size(TokenKind::List, 11, 15, 1, 2),
+                Token::with_size(TokenKind::List, 12, 14, 0, 1),
             ],
             &tokens[..]
         );
@@ -506,7 +506,7 @@ mod tests {
         let s = b"lede";
         let (tokens, len) = Parser::new().parse_prefix(s).unwrap();
         assert_eq!(
-            &[Token::with_size(TokenKind::List, 1, 1, 0, 1)],
+            &[Token::with_size(TokenKind::List, 0, 2, 0, 1)],
             &tokens[..]
         );
         assert_eq!(2, len);
@@ -518,7 +518,7 @@ mod tests {
         let mut tokens = vec![];
         let len = Parser::new().parse_prefix_in(s, &mut tokens).unwrap();
         assert_eq!(
-            &[Token::with_size(TokenKind::List, 1, 1, 0, 1)],
+            &[Token::with_size(TokenKind::List, 0, 2, 0, 1)],
             &tokens[..]
         );
         assert_eq!(2, len);

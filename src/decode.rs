@@ -141,7 +141,10 @@ impl<'a> Node<'a> {
         })
     }
 
-    /// Returns raw bytes inside this node.
+    /// Returns raw bytes of this node.
+    ///
+    /// This returns complete raw bytes for dict and list, but remove the headers
+    /// from string and int.
     ///
     /// # Examples
     ///
@@ -151,7 +154,7 @@ impl<'a> Node<'a> {
     ///
     ///     let bytes = b"l1:a2:bce";
     ///     let node = Node::parse(bytes).unwrap();
-    ///     assert_eq!(b"1:a2:bc", node.data());
+    ///     assert_eq!(b"l1:a2:bce", node.data());
     /// ```
     pub fn data(&self) -> &'a [u8] {
         &self.buf[self.tokens[self.idx].range()]
@@ -506,7 +509,7 @@ mod tests {
         let node = Node::parse(s).unwrap();
         let node = node.as_list().unwrap();
         assert_eq!(b"a", node.get(0).unwrap().data());
-        assert_eq!(b"1:al1:ae", node.get(1).unwrap().data());
+        assert_eq!(b"d1:al1:aee", node.get(1).unwrap().data());
         assert_eq!(b"b", node.get(2).unwrap().data());
         assert_eq!(None, node.get(3));
     }
@@ -518,7 +521,7 @@ mod tests {
         let node = node.as_list().unwrap();
         let node = node.get_list(1).unwrap();
         assert_eq!(b"a", node.get(0).unwrap().data());
-        assert_eq!(b"1:al1:ae", node.get(1).unwrap().data());
+        assert_eq!(b"d1:al1:aee", node.get(1).unwrap().data());
         assert_eq!(b"b", node.get(2).unwrap().data());
         assert_eq!(None, node.get(3));
     }
@@ -529,7 +532,7 @@ mod tests {
         let node = Node::parse(s).unwrap();
         let mut iter = node.as_list().unwrap().iter();
         assert_eq!(b"a", iter.next().unwrap().data());
-        assert_eq!(b"1:al1:ae", iter.next().unwrap().data());
+        assert_eq!(b"d1:al1:aee", iter.next().unwrap().data());
         assert_eq!(b"b", iter.next().unwrap().data());
         assert_eq!(None, iter.next());
     }
@@ -567,7 +570,7 @@ mod tests {
 
         let (k, v) = iter.next().unwrap();
         assert_eq!(b"a", k);
-        assert_eq!(b"", v.data());
+        assert_eq!(b"le", v.data());
 
         assert_eq!(None, iter.next());
     }
@@ -587,7 +590,7 @@ mod tests {
 
         let (k, v) = iter.next().unwrap();
         assert_eq!(b"a", k);
-        assert_eq!(b"", v.data());
+        assert_eq!(b"le", v.data());
 
         assert_eq!(None, iter.next());
     }
