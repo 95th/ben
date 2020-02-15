@@ -54,13 +54,27 @@ impl Token {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
     /// The string is not a full Bencode packet, more bytes expected
-    Incomplete,
+    Eof,
     /// Invalid character inside Bencode string
-    Invalid,
+    Unexpected { pos: usize },
+    /// Invalid character inside Bencode string
+    Invalid { reason: &'static str },
     /// Not enough tokens were provided
     NoMemory,
-    /// Overflow (numeric or otherwise)
-    Overflow,
+    /// Integer Overflow
+    Overflow { pos: usize },
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Eof => write!(f, "Unexpected End of File"),
+            Self::Unexpected { pos } => write!(f, "Unexpected character at {}", pos),
+            Self::Invalid { reason } => write!(f, "Invalid Input: {}", reason),
+            Self::NoMemory => write!(f, "No tokens left to parse"),
+            Self::Overflow { pos } => write!(f, "Integer overflow at {}", pos),
+        }
+    }
 }
 
 /// Bencode Parser
@@ -112,7 +126,9 @@ impl Parser {
         if len == buf.len() {
             Ok(())
         } else {
-            Err(Error::Invalid)
+            Err(Error::Invalid {
+                reason: "Extra bytes at the end",
+            })
         }
     }
 
@@ -174,7 +190,9 @@ impl Parser {
 
                     // Error if unclosed object
                     if i == -1 {
-                        return Err(Error::Invalid);
+                        return Err(Error::Invalid {
+                            reason: "Unclosed object",
+                        });
                     }
 
                     while i >= 0 {
@@ -189,7 +207,7 @@ impl Parser {
                 }
                 _ => {
                     // Unexpected char
-                    return Err(Error::Invalid);
+                    return Err(Error::Unexpected { pos: self.pos });
                 }
             }
             if depth == 0 {
@@ -201,12 +219,12 @@ impl Parser {
 
             // Unclosed object
             if token.start >= 0 && token.end < 0 {
-                return Err(Error::Incomplete);
+                return Err(Error::Eof);
             }
 
             if let TokenKind::Dict = token.kind {
                 if token.children % 2 != 0 {
-                    return Err(Error::Incomplete);
+                    return Err(Error::Eof);
                 }
             }
         }
@@ -222,7 +240,9 @@ impl Parser {
         t.children += 1;
         if let TokenKind::Dict = t.kind {
             if curr_kind != TokenKind::ByteStr && t.children % 2 != 0 {
-                return Err(Error::Invalid); // Can't have key other than byte string
+                return Err(Error::Invalid {
+                    reason: "Dictionary key must be a string",
+                });
             }
         }
         Ok(())
@@ -231,7 +251,7 @@ impl Parser {
     /// Parse bencode int.
     fn parse_int(&mut self, buf: &[u8], stop_char: u8) -> Result<i64, Error> {
         if self.pos >= buf.len() {
-            return Err(Error::Invalid);
+            return Err(Error::Eof);
         }
 
         let mut negative = false;
@@ -244,7 +264,7 @@ impl Parser {
             negative = true;
             if self.pos == buf.len() {
                 self.pos = start;
-                return Err(Error::Invalid);
+                return Err(Error::Eof);
             }
         }
 
@@ -253,13 +273,13 @@ impl Parser {
                 c @ b'0'..=b'9' => {
                     if val > i64::max_value() / 10 {
                         self.pos = start;
-                        return Err(Error::Overflow);
+                        return Err(Error::Overflow { pos: start });
                     }
                     val *= 10;
                     let digit = (c - b'0') as i64;
                     if val > i64::max_value() - digit {
                         self.pos = start;
-                        return Err(Error::Overflow);
+                        return Err(Error::Overflow { pos: start });
                     }
                     val += digit;
                     self.pos += 1
@@ -268,8 +288,9 @@ impl Parser {
                     if c == stop_char {
                         break;
                     } else {
+                        let pos = self.pos;
                         self.pos = start;
-                        return Err(Error::Invalid);
+                        return Err(Error::Unexpected { pos });
                     }
                 }
             }
@@ -290,13 +311,15 @@ impl Parser {
 
         if len < 0 {
             self.pos = start;
-            return Err(Error::Invalid);
+            return Err(Error::Invalid {
+                reason: "String length must be positive",
+            });
         }
 
         let len = len as usize;
         if self.pos + len > buf.len() {
             self.pos = start;
-            return Err(Error::Invalid);
+            return Err(Error::Eof);
         }
 
         let token = Token::new(TokenKind::ByteStr, self.pos as _, (self.pos + len) as _);
@@ -342,14 +365,19 @@ mod tests {
     fn parse_string_too_long() {
         let s = b"3:abcd";
         let err = Parser::new().parse(s).unwrap_err();
-        assert_eq!(Error::Invalid, err);
+        assert_eq!(
+            Error::Invalid {
+                reason: "Extra bytes at the end"
+            },
+            err
+        );
     }
 
     #[test]
     fn parse_string_too_short() {
         let s = b"3:ab";
         let err = Parser::new().parse(s).unwrap_err();
-        assert_eq!(Error::Invalid, err);
+        assert_eq!(Error::Eof, err);
     }
 
     #[test]
@@ -363,21 +391,21 @@ mod tests {
     fn unclosed_dict() {
         let s = b"d";
         let err = Parser::new().parse(s).unwrap_err();
-        assert_eq!(Error::Incomplete, err);
+        assert_eq!(Error::Eof, err);
     }
 
     #[test]
     fn key_only_dict() {
         let s = b"d1:ae";
         let err = Parser::new().parse(s).unwrap_err();
-        assert_eq!(Error::Incomplete, err);
+        assert_eq!(Error::Eof, err);
     }
 
     #[test]
     fn key_only_dict_2() {
         let s = b"d1:a1:a1:ae";
         let err = Parser::new().parse(s).unwrap_err();
-        assert_eq!(Error::Incomplete, err);
+        assert_eq!(Error::Eof, err);
     }
 
     #[test]
@@ -431,7 +459,7 @@ mod tests {
     fn unclosed_list() {
         let s = b"l";
         let err = Parser::new().parse(s).unwrap_err();
-        assert_eq!(Error::Incomplete, err);
+        assert_eq!(Error::Eof, err);
     }
 
     #[test]
@@ -495,10 +523,30 @@ mod tests {
 
     #[test]
     fn multiple_root_tokens() {
-        assert_eq!(Error::Invalid, Parser::new().parse(b"1:a1:b").unwrap_err());
-        assert_eq!(Error::Invalid, Parser::new().parse(b"i1e1:b").unwrap_err());
-        assert_eq!(Error::Invalid, Parser::new().parse(b"l1:aede").unwrap_err());
-        assert_eq!(Error::Invalid, Parser::new().parse(b"lel1:ae").unwrap_err());
+        assert_eq!(
+            Error::Invalid {
+                reason: "Extra bytes at the end"
+            },
+            Parser::new().parse(b"1:a1:b").unwrap_err()
+        );
+        assert_eq!(
+            Error::Invalid {
+                reason: "Extra bytes at the end"
+            },
+            Parser::new().parse(b"i1e1:b").unwrap_err()
+        );
+        assert_eq!(
+            Error::Invalid {
+                reason: "Extra bytes at the end"
+            },
+            Parser::new().parse(b"l1:aede").unwrap_err()
+        );
+        assert_eq!(
+            Error::Invalid {
+                reason: "Extra bytes at the end"
+            },
+            Parser::new().parse(b"lel1:ae").unwrap_err()
+        );
     }
 
     #[test]

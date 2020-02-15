@@ -613,7 +613,7 @@ mod tests {
     fn int_value_invalid() {
         let s = b"ixyze";
         let err = Parser::new().parse(s).unwrap_err();
-        assert_eq!(Error::Invalid, err);
+        assert_eq!(Error::Unexpected { pos: 1 }, err);
     }
 
     #[test]
