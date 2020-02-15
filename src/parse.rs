@@ -288,7 +288,7 @@ impl Parser {
         let len = self.parse_int(buf, b':')?;
         self.pos += 1; // Skip the ':'
 
-        if len <= 0 {
+        if len < 0 {
             self.pos = start;
             return Err(Error::Invalid);
         }
@@ -522,5 +522,15 @@ mod tests {
             &tokens[..]
         );
         assert_eq!(2, len);
+    }
+
+    #[test]
+    fn parse_empty_string() {
+        let s = b"0:";
+        let tokens = Parser::new().parse(s).unwrap();
+        assert_eq!(
+            &[Token::with_size(TokenKind::ByteStr, 2, 2, 0, 1)],
+            &tokens[..]
+        );
     }
 }
