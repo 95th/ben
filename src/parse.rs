@@ -58,7 +58,7 @@ pub enum Error {
     /// Invalid character inside Bencode string
     Unexpected { pos: usize },
     /// Invalid character inside Bencode string
-    Invalid { reason: &'static str },
+    Invalid { reason: &'static str, pos: usize },
     /// Not enough tokens were provided
     NoMemory,
     /// Integer Overflow
@@ -70,7 +70,7 @@ impl fmt::Display for Error {
         match *self {
             Self::Eof => write!(f, "Unexpected End of File"),
             Self::Unexpected { pos } => write!(f, "Unexpected character at {}", pos),
-            Self::Invalid { reason } => write!(f, "Invalid Input: {}", reason),
+            Self::Invalid { reason, pos } => write!(f, "Invalid input at {}: {}", pos, reason),
             Self::NoMemory => write!(f, "No tokens left to parse"),
             Self::Overflow { pos } => write!(f, "Integer overflow at {}", pos),
         }
@@ -128,6 +128,7 @@ impl Parser {
         } else {
             Err(Error::Invalid {
                 reason: "Extra bytes at the end",
+                pos: len,
             })
         }
     }
@@ -192,6 +193,7 @@ impl Parser {
                     if i == -1 {
                         return Err(Error::Invalid {
                             reason: "Unclosed object",
+                            pos: self.pos,
                         });
                     }
 
@@ -242,6 +244,7 @@ impl Parser {
             if curr_kind != TokenKind::ByteStr && t.children % 2 != 0 {
                 return Err(Error::Invalid {
                     reason: "Dictionary key must be a string",
+                    pos: self.pos,
                 });
             }
         }
@@ -313,6 +316,7 @@ impl Parser {
             self.pos = start;
             return Err(Error::Invalid {
                 reason: "String length must be positive",
+                pos: self.pos,
             });
         }
 
@@ -367,7 +371,8 @@ mod tests {
         let err = Parser::new().parse(s).unwrap_err();
         assert_eq!(
             Error::Invalid {
-                reason: "Extra bytes at the end"
+                reason: "Extra bytes at the end",
+                pos: 5,
             },
             err
         );
@@ -525,25 +530,29 @@ mod tests {
     fn multiple_root_tokens() {
         assert_eq!(
             Error::Invalid {
-                reason: "Extra bytes at the end"
+                reason: "Extra bytes at the end",
+                pos: 3,
             },
             Parser::new().parse(b"1:a1:b").unwrap_err()
         );
         assert_eq!(
             Error::Invalid {
-                reason: "Extra bytes at the end"
+                reason: "Extra bytes at the end",
+                pos: 3,
             },
             Parser::new().parse(b"i1e1:b").unwrap_err()
         );
         assert_eq!(
             Error::Invalid {
-                reason: "Extra bytes at the end"
+                reason: "Extra bytes at the end",
+                pos: 5,
             },
             Parser::new().parse(b"l1:aede").unwrap_err()
         );
         assert_eq!(
             Error::Invalid {
-                reason: "Extra bytes at the end"
+                reason: "Extra bytes at the end",
+                pos: 2,
             },
             Parser::new().parse(b"lel1:ae").unwrap_err()
         );
