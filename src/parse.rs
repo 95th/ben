@@ -63,15 +63,15 @@ pub enum Error {
     Overflow,
 }
 
-/// Bencode Decoder
-pub struct BenDecoder {
+/// Bencode Parser
+pub struct Parser {
     pos: usize,
     tok_next: usize,
     tok_super: isize,
     token_limit: usize,
 }
 
-impl Default for BenDecoder {
+impl Default for Parser {
     fn default() -> Self {
         Self {
             pos: 0,
@@ -82,7 +82,7 @@ impl Default for BenDecoder {
     }
 }
 
-impl BenDecoder {
+impl Parser {
     pub fn new() -> Self {
         Self::default()
     }
@@ -327,63 +327,63 @@ mod tests {
     #[test]
     fn parse_int() {
         let s = b"i12e";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(&[Token::new(TokenKind::Int, 1, 3)], &tokens[..]);
     }
 
     #[test]
     fn parse_string() {
         let s = b"3:abc";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(&[Token::new(TokenKind::ByteStr, 2, 5)], &tokens[..]);
     }
 
     #[test]
     fn parse_string_too_long() {
         let s = b"3:abcd";
-        let err = BenDecoder::new().parse(s).unwrap_err();
+        let err = Parser::new().parse(s).unwrap_err();
         assert_eq!(Error::Invalid, err);
     }
 
     #[test]
     fn parse_string_too_short() {
         let s = b"3:ab";
-        let err = BenDecoder::new().parse(s).unwrap_err();
+        let err = Parser::new().parse(s).unwrap_err();
         assert_eq!(Error::Invalid, err);
     }
 
     #[test]
     fn empty_dict() {
         let s = b"de";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(&[Token::new(TokenKind::Dict, 1, 1)], &tokens[..]);
     }
 
     #[test]
     fn unclosed_dict() {
         let s = b"d";
-        let err = BenDecoder::new().parse(s).unwrap_err();
+        let err = Parser::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn key_only_dict() {
         let s = b"d1:ae";
-        let err = BenDecoder::new().parse(s).unwrap_err();
+        let err = Parser::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn key_only_dict_2() {
         let s = b"d1:a1:a1:ae";
-        let err = BenDecoder::new().parse(s).unwrap_err();
+        let err = Parser::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn dict_string_values() {
         let s = b"d1:a2:ab3:abc4:abcde";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::Dict, 1, 19, 4, 5),
@@ -399,7 +399,7 @@ mod tests {
     #[test]
     fn dict_mixed_values() {
         let s = b"d1:a1:b1:ci1e1:x1:y1:dde1:fle1:g1:he";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::Dict, 1, 35, 12, 13),
@@ -423,21 +423,21 @@ mod tests {
     #[test]
     fn empty_list() {
         let s = b"le";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(&[Token::new(TokenKind::List, 1, 1)], &tokens[..]);
     }
 
     #[test]
     fn unclosed_list() {
         let s = b"l";
-        let err = BenDecoder::new().parse(s).unwrap_err();
+        let err = Parser::new().parse(s).unwrap_err();
         assert_eq!(Error::Incomplete, err);
     }
 
     #[test]
     fn list_string_values() {
         let s = b"l1:a2:ab3:abc4:abcde";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::List, 1, 19, 4, 5),
@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn list_nested() {
         let s = b"lllleeee";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::List, 1, 7, 1, 4),
@@ -468,7 +468,7 @@ mod tests {
     #[test]
     fn list_nested_complex() {
         let s = b"ld1:ald2:ablleeeeee";
-        let tokens = BenDecoder::new().parse(s).unwrap();
+        let tokens = Parser::new().parse(s).unwrap();
         assert_eq!(
             &[
                 Token::with_size(TokenKind::List, 1, 18, 1, 8),
@@ -487,7 +487,7 @@ mod tests {
     #[test]
     fn token_limit() {
         let s = b"l1:a2:ab3:abc4:abcde";
-        let mut parser = BenDecoder::new();
+        let mut parser = Parser::new();
         parser.set_token_limit(3);
         let err = parser.parse(s).unwrap_err();
         assert_eq!(Error::NoMemory, err);
@@ -495,28 +495,16 @@ mod tests {
 
     #[test]
     fn multiple_root_tokens() {
-        assert_eq!(
-            Error::Invalid,
-            BenDecoder::new().parse(b"1:a1:b").unwrap_err()
-        );
-        assert_eq!(
-            Error::Invalid,
-            BenDecoder::new().parse(b"i1e1:b").unwrap_err()
-        );
-        assert_eq!(
-            Error::Invalid,
-            BenDecoder::new().parse(b"l1:aede").unwrap_err()
-        );
-        assert_eq!(
-            Error::Invalid,
-            BenDecoder::new().parse(b"lel1:ae").unwrap_err()
-        );
+        assert_eq!(Error::Invalid, Parser::new().parse(b"1:a1:b").unwrap_err());
+        assert_eq!(Error::Invalid, Parser::new().parse(b"i1e1:b").unwrap_err());
+        assert_eq!(Error::Invalid, Parser::new().parse(b"l1:aede").unwrap_err());
+        assert_eq!(Error::Invalid, Parser::new().parse(b"lel1:ae").unwrap_err());
     }
 
     #[test]
     fn parse_prefix() {
         let s = b"lede";
-        let (tokens, len) = BenDecoder::new().parse_prefix(s).unwrap();
+        let (tokens, len) = Parser::new().parse_prefix(s).unwrap();
         assert_eq!(
             &[Token::with_size(TokenKind::List, 1, 1, 0, 1)],
             &tokens[..]
@@ -528,7 +516,7 @@ mod tests {
     fn parse_prefix_in() {
         let s = b"lede";
         let mut tokens = vec![];
-        let len = BenDecoder::new().parse_prefix_in(s, &mut tokens).unwrap();
+        let len = Parser::new().parse_prefix_in(s, &mut tokens).unwrap();
         assert_eq!(
             &[Token::with_size(TokenKind::List, 1, 1, 0, 1)],
             &tokens[..]

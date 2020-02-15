@@ -1,5 +1,5 @@
 use crate::parse::TokenKind;
-use crate::parse::{BenDecoder, Token};
+use crate::parse::{Parser, Token};
 use std::borrow::Cow;
 use std::fmt;
 
@@ -53,8 +53,8 @@ impl<'a> Node<'a> {
     ///     }
     /// ```
     pub fn parse_in(buf: &'a [u8], tokens: &'a mut Vec<Token>) -> crate::Result<Self> {
-        let decoder = BenDecoder::new();
-        decoder.parse_in(buf, tokens)?;
+        let parser = Parser::new();
+        parser.parse_in(buf, tokens)?;
         Ok(Self {
             buf,
             tokens: Cow::Borrowed(tokens),
@@ -77,8 +77,8 @@ impl<'a> Node<'a> {
     ///     assert_eq!(b" World", &bytes[i..]);
     /// ```
     pub fn parse_prefix(buf: &'a [u8]) -> crate::Result<(Self, usize)> {
-        let decoder = BenDecoder::new();
-        let (tokens, len) = decoder.parse_prefix(buf)?;
+        let parser = Parser::new();
+        let (tokens, len) = parser.parse_prefix(buf)?;
         let node = Self {
             buf,
             tokens: Cow::Owned(tokens),
@@ -108,8 +108,8 @@ impl<'a> Node<'a> {
         buf: &'a [u8],
         tokens: &'a mut Vec<Token>,
     ) -> crate::Result<(Self, usize)> {
-        let decoder = BenDecoder::new();
-        let len = decoder.parse_prefix_in(buf, tokens)?;
+        let parser = Parser::new();
+        let len = parser.parse_prefix_in(buf, tokens)?;
         let node = Self {
             buf,
             tokens: Cow::Borrowed(tokens),
@@ -132,11 +132,11 @@ impl<'a> Node<'a> {
     ///     assert_eq!(Error::NoMemory, err);
     /// ```
     pub fn parse_max_tokens(buf: &'a [u8], max_tokens: usize) -> crate::Result<Self> {
-        let mut decoder = BenDecoder::new();
-        decoder.set_token_limit(max_tokens);
+        let mut parser = Parser::new();
+        parser.set_token_limit(max_tokens);
         Ok(Self {
             buf,
-            tokens: Cow::Owned(decoder.parse(buf)?),
+            tokens: Cow::Owned(parser.parse(buf)?),
             idx: 0,
         })
     }
@@ -609,7 +609,7 @@ mod tests {
     #[test]
     fn int_value_invalid() {
         let s = b"ixyze";
-        let err = BenDecoder::new().parse(s).unwrap_err();
+        let err = Parser::new().parse(s).unwrap_err();
         assert_eq!(Error::Invalid, err);
     }
 
