@@ -1,25 +1,25 @@
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 
-/// Encoder to use for encoding data into bencode format.
+/// Entry to use for encoding data into bencode format.
 #[derive(Debug, Clone, PartialOrd, PartialEq)]
-pub enum Encoder {
+pub enum Entry {
     Int(i64),
     Bytes(Vec<u8>),
     List(Vec<Self>),
     Dict(BTreeMap<&'static str, Self>),
 }
 
-impl Encoder {
+impl Entry {
     /// Encodes data into a vector of bencoded bytes.
     ///
     /// # Examples:
     /// Basic usage:
     ///
     /// ```
-    /// use ben::Encoder;
+    /// use ben::Entry;
     ///
-    /// let enc = Encoder::from(vec![Encoder::from("Hello"), Encoder::from("World")]);
+    /// let enc = Entry::from(vec![Entry::from("Hello"), Entry::from("World")]);
     /// let bytes = enc.to_vec();
     /// assert_eq!(b"l5:Hello5:Worlde", &bytes[..]);
     /// ```
@@ -35,16 +35,16 @@ impl Encoder {
     /// Basic usage:
     ///
     /// ```
-    /// use ben::Encoder;
+    /// use ben::Entry;
     ///
     /// let mut bytes = vec![];
-    /// let enc = Encoder::from(vec![Encoder::from("Hello"), Encoder::from("World")]);
+    /// let enc = Entry::from(vec![Entry::from("Hello"), Entry::from("World")]);
     /// enc.write(&mut bytes).unwrap();
     /// assert_eq!(b"l5:Hello5:Worlde", &bytes[..]);
     /// ```
     pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
         enum Token<'a> {
-            B(&'a Encoder),
+            B(&'a Entry),
             S(&'a str),
             E,
         }
@@ -85,43 +85,43 @@ impl Encoder {
     }
 }
 
-impl From<i64> for Encoder {
+impl From<i64> for Entry {
     fn from(v: i64) -> Self {
         Self::Int(v)
     }
 }
 
-impl From<Vec<u8>> for Encoder {
+impl From<Vec<u8>> for Entry {
     fn from(v: Vec<u8>) -> Self {
         Self::Bytes(v)
     }
 }
 
-impl From<&[u8]> for Encoder {
+impl From<&[u8]> for Entry {
     fn from(v: &[u8]) -> Self {
         v.to_vec().into()
     }
 }
 
-impl From<&str> for Encoder {
+impl From<&str> for Entry {
     fn from(v: &str) -> Self {
         v.as_bytes().into()
     }
 }
 
-impl From<String> for Encoder {
+impl From<String> for Entry {
     fn from(v: String) -> Self {
         v.into_bytes().into()
     }
 }
 
-impl From<Vec<Self>> for Encoder {
+impl From<Vec<Self>> for Entry {
     fn from(v: Vec<Self>) -> Self {
         Self::List(v)
     }
 }
 
-impl From<BTreeMap<&'static str, Self>> for Encoder {
+impl From<BTreeMap<&'static str, Self>> for Entry {
     fn from(v: BTreeMap<&'static str, Self>) -> Self {
         Self::Dict(v)
     }
@@ -133,13 +133,13 @@ mod tests {
 
     #[test]
     fn encode_int() {
-        let b = Encoder::from(10).to_vec();
+        let b = Entry::from(10).to_vec();
         assert_eq!(b"i10e", &b[..]);
     }
 
     #[test]
     fn encode_str() {
-        let b = Encoder::from("1000").to_vec();
+        let b = Entry::from("1000").to_vec();
         assert_eq!(b"4:1000", &b[..]);
     }
 
@@ -147,17 +147,17 @@ mod tests {
     fn encode_dict() {
         let mut dict = BTreeMap::new();
         dict.insert("Hello", "World".into());
-        let b = Encoder::from(dict).to_vec();
+        let b = Entry::from(dict).to_vec();
         assert_eq!(b"d5:Hello5:Worlde", &b[..]);
     }
 
     #[test]
     fn encode_list() {
-        let mut list: Vec<Encoder> = vec![];
+        let mut list: Vec<Entry> = vec![];
         list.push("Hello".into());
         list.push("World".into());
         list.push(123.into());
-        let b = Encoder::from(list).to_vec();
+        let b = Entry::from(list).to_vec();
         assert_eq!(b"l5:Hello5:Worldi123ee", &b[..]);
     }
 }

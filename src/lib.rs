@@ -7,7 +7,7 @@ mod encode;
 mod parse;
 
 pub use decode::{Dict, List, Node};
-pub use encode::Encoder;
+pub use encode::Entry;
 pub use parse::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
