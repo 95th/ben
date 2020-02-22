@@ -12,10 +12,21 @@ pub struct Node<'a> {
 
 impl fmt::Debug for Node<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Node")
-            .field("idx", &self.idx)
-            .field("token", &self.tokens[self.idx])
-            .finish()
+        match self.kind() {
+            TokenKind::Int => write!(f, "{}", self.as_int().unwrap()),
+            TokenKind::ByteStr => match self.as_str() {
+                Some(s) => write!(f, "{}", s),
+                None => write!(f, "`Bytes:{:?}`", self.data()),
+            },
+            TokenKind::List => f
+                .debug_list()
+                .entries(self.as_list().unwrap().iter())
+                .finish(),
+            TokenKind::Dict => f
+                .debug_map()
+                .entries(self.as_dict().unwrap().iter())
+                .finish(),
+        }
     }
 }
 
@@ -415,7 +426,7 @@ impl<'a> Dict<'a> {
 
     /// Returns the `Node` for the given key.
     pub fn get(&self, key: &[u8]) -> Option<Node<'a>> {
-        self.iter().find(|(k, _)| *k == key).map(|(_, v)| v)
+        self.iter().find(|(k, _)| k.data() == key).map(|(_, v)| v)
     }
 
     /// Returns the `Dict` for the given key.
@@ -456,7 +467,7 @@ pub struct DictIter<'a> {
 }
 
 impl<'a> Iterator for DictIter<'a> {
-    type Item = (&'a [u8], Node<'a>);
+    type Item = (Node<'a>, Node<'a>);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.pos >= self.total {
@@ -475,11 +486,12 @@ impl<'a> Iterator for DictIter<'a> {
 
         self.pos += 2;
 
-        let key_range = self.tokens[key_idx].range();
-        let key = &self.buf[key_range];
-
         Some((
-            key,
+            Node {
+                idx: key_idx,
+                buf: self.buf,
+                tokens: Cow::Borrowed(self.tokens),
+            },
             Node {
                 idx: val_idx,
                 buf: self.buf,
@@ -552,11 +564,11 @@ mod tests {
         let mut iter = node.as_dict().unwrap().iter();
 
         let (k, v) = iter.next().unwrap();
-        assert_eq!(b"a", k);
+        assert_eq!(b"a", k.data());
         assert_eq!(b"bc", v.data());
 
         let (k, v) = iter.next().unwrap();
-        assert_eq!(b"def", k);
+        assert_eq!(b"def", k.data());
         assert_eq!(b"ghij", v.data());
 
         assert_eq!(None, iter.next());
@@ -569,7 +581,7 @@ mod tests {
         let mut iter = node.as_dict().unwrap().iter();
 
         let (k, v) = iter.next().unwrap();
-        assert_eq!(b"a", k);
+        assert_eq!(b"a", k.data());
         assert_eq!(b"le", v.data());
 
         assert_eq!(None, iter.next());
@@ -589,7 +601,7 @@ mod tests {
         let mut iter = dict.as_dict().unwrap().iter();
 
         let (k, v) = iter.next().unwrap();
-        assert_eq!(b"a", k);
+        assert_eq!(b"a", k.data());
         assert_eq!(b"le", v.data());
 
         assert_eq!(None, iter.next());
