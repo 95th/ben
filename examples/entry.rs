@@ -10,10 +10,10 @@ fn main() {
     let mut dict = list.add_dict();
     dict.add_bytes("a", b"b");
     dict.add_str("x", "y");
-    drop(dict);
+    dict.finish();
 
     list.add_int(1);
-    drop(list);
+    list.finish();
 
     let n = Node::parse(&v).unwrap();
     println!("{:#?}", n);

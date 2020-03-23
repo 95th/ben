@@ -28,32 +28,34 @@ impl List<'_> {
         buf.push(b'l');
         List { buf }
     }
-}
 
-impl Encoder for List<'_> {
-    fn add_list(&mut self) -> List<'_> {
+    /// Create a new `List` in this list
+    pub fn add_list(&mut self) -> List<'_> {
         List::new(self.buf)
     }
 
-    fn add_dict(&mut self) -> Dict<'_> {
+    /// Create a new `Dict` in this list
+    pub fn add_dict(&mut self) -> Dict<'_> {
         Dict::new(self.buf)
     }
 
-    fn add_str(&mut self, value: &str) {
+    /// Encode string slice
+    pub fn add_str(&mut self, value: &str) {
         self.buf.add_str(value);
     }
 
-    fn add_bytes(&mut self, value: &[u8]) {
+    /// Encode a byte slice.
+    pub fn add_bytes(&mut self, value: &[u8]) {
         self.buf.add_bytes(value);
     }
 
-    fn add_int(&mut self, value: i64) {
+    /// Encode an integer value
+    pub fn add_int(&mut self, value: i64) {
         self.buf.add_int(value);
     }
-}
 
-impl Drop for List<'_> {
-    fn drop(&mut self) {
+    /// Finish this list. User must call this method after adding the entries.
+    pub fn finish(self) {
         self.buf.push(b'e');
     }
 }
@@ -98,10 +100,9 @@ impl Dict<'_> {
         self.buf.add_str(key);
         self.buf.add_int(value);
     }
-}
 
-impl Drop for Dict<'_> {
-    fn drop(&mut self) {
+    /// Finish this dict. User must call this method after adding the entries.
+    pub fn finish(self) {
         self.buf.push(b'e');
     }
 }
@@ -150,22 +151,20 @@ mod tests {
     #[test]
     fn encode_dict() {
         let mut e = vec![];
-        {
-            let mut dict = e.add_dict();
-            dict.add_str("Hello", "World");
-        }
+        let mut dict = e.add_dict();
+        dict.add_str("Hello", "World");
+        dict.finish();
         assert_eq!(b"d5:Hello5:Worlde", &e[..]);
     }
 
     #[test]
     fn encode_list() {
         let mut e = vec![];
-        {
-            let mut list = e.add_list();
-            list.add_str("Hello");
-            list.add_str("World");
-            list.add_int(123);
-        }
+        let mut list = e.add_list();
+        list.add_str("Hello");
+        list.add_str("World");
+        list.add_int(123);
+        list.finish();
         assert_eq!(b"l5:Hello5:Worldi123ee", &e[..]);
     }
 }
