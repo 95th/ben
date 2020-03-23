@@ -2,12 +2,12 @@
 //! a flat stream of tokens rather than an actual tree and thus avoids
 //! unneccessary allocations.
 
-mod decode;
-mod encode;
+pub mod decode;
+pub mod encode;
 mod parse;
 
-pub use decode::{Dict, List, Node};
-pub use encode::Entry;
+pub use decode::Node;
+pub use encode::Encoder;
 pub use parse::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,140 +1,126 @@
-use std::borrow::Cow;
-use std::collections::BTreeMap;
-use std::io::{self, Write};
+use std::io::Write;
 
-/// Entry to use for encoding data into bencode format.
-#[derive(Debug, Clone, PartialOrd, PartialEq)]
-pub struct Entry(Inner<Self>);
+pub trait Encoder {
+    fn add_int(&mut self, value: i64);
 
-#[derive(Debug, Clone, PartialOrd, PartialEq)]
-enum Inner<T> {
-    Int(i64),
-    Bytes(Cow<'static, [u8]>),
-    List(Vec<T>),
-    Dict(BTreeMap<&'static str, T>),
+    fn add_byte(&mut self, value: u8);
+
+    fn add_bytes(&mut self, value: &[u8]);
+
+    fn add_str(&mut self, value: &str);
+
+    fn add_list(&mut self) -> List<Self>
+    where
+        Self: Sized;
+
+    fn add_dict(&mut self) -> Dict<Self>
+    where
+        Self: Sized;
 }
 
-impl Entry {
-    /// Encodes data into a vector of bencoded bytes.
-    ///
-    /// # Examples:
-    /// Basic usage:
-    ///
-    /// ```
-    /// use ben::Entry;
-    ///
-    /// let enc = Entry::from(vec![Entry::from("Hello"), Entry::from("World")]);
-    /// let bytes = enc.to_vec();
-    /// assert_eq!(b"l5:Hello5:Worlde", &bytes[..]);
-    /// ```
-    pub fn to_vec(&self) -> Vec<u8> {
-        let mut v = vec![];
-        self.write(&mut v).unwrap();
-        v
+pub struct List<'a, E: Encoder> {
+    encoder: &'a mut E,
+}
+
+impl<E: Encoder> List<'_, E> {
+    pub fn new(encoder: &mut E) -> List<E> {
+        encoder.add_byte(b'l');
+        List { encoder }
     }
 
-    /// Encodes and writes the data into given `Write` object.
-    ///
-    /// # Examples:
-    /// Basic usage:
-    ///
-    /// ```
-    /// use ben::Entry;
-    ///
-    /// let mut bytes = vec![];
-    /// let enc = Entry::from(vec![Entry::from("Hello"), Entry::from("World")]);
-    /// enc.write(&mut bytes).unwrap();
-    /// assert_eq!(b"l5:Hello5:Worlde", &bytes[..]);
-    /// ```
-    pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-        enum Token<'a> {
-            B(&'a Inner<Entry>),
-            S(&'a str),
-            E,
-        }
+    pub fn add_list(&mut self) -> List<E> {
+        List::new(&mut self.encoder)
+    }
 
-        use Inner::*;
-        use Token::*;
-        let mut stack = vec![B(&self.0)];
-        while !stack.is_empty() {
-            match stack.pop().unwrap() {
-                Token::B(v) => match v {
-                    Int(n) => {
-                        write!(w, "i{}e", n)?;
-                    }
-                    Bytes(v) => {
-                        write!(w, "{}:", v.len())?;
-                        w.write_all(&v[..])?;
-                    }
-                    List(v) => {
-                        write!(w, "l")?;
-                        stack.push(E);
-                        stack.extend(v.iter().rev().map(|e| B(&e.0)));
-                    }
-                    Dict(m) => {
-                        write!(w, "d")?;
-                        stack.push(E);
-                        for (k, v) in m.iter().rev() {
-                            stack.push(B(&v.0));
-                            stack.push(S(k));
-                        }
-                    }
-                },
-                Token::S(s) => {
-                    write!(w, "{}:{}", s.len(), s)?;
-                }
-                Token::E => write!(w, "e")?,
-            }
-        }
-        Ok(())
+    pub fn add_dict(&mut self) -> Dict<E> {
+        Dict::new(&mut self.encoder)
+    }
+
+    pub fn add_str(&mut self, value: &str) {
+        self.encoder.add_str(value);
+    }
+
+    pub fn add_bytes(&mut self, value: &[u8]) {
+        self.encoder.add_bytes(value);
+    }
+
+    pub fn add_int(&mut self, value: i64) {
+        self.encoder.add_int(value);
     }
 }
 
-impl From<i64> for Entry {
-    fn from(v: i64) -> Self {
-        Self(Inner::Int(v))
+impl<E: Encoder> Drop for List<'_, E> {
+    fn drop(&mut self) {
+        self.encoder.add_byte(b'e');
     }
 }
 
-impl From<Cow<'static, [u8]>> for Entry {
-    fn from(v: Cow<'static, [u8]>) -> Self {
-        Self(Inner::Bytes(v))
+pub struct Dict<'a, E: Encoder> {
+    encoder: &'a mut E,
+}
+
+impl<E: Encoder> Dict<'_, E> {
+    pub fn new(encoder: &mut E) -> Dict<E> {
+        encoder.add_byte(b'd');
+        Dict { encoder }
+    }
+
+    pub fn add_list(&mut self, key: &str) -> List<E> {
+        self.encoder.add_str(key);
+        List::new(&mut self.encoder)
+    }
+
+    pub fn add_dict(&mut self, key: &str) -> Dict<E> {
+        self.encoder.add_str(key);
+        Dict::new(&mut self.encoder)
+    }
+
+    pub fn add_str(&mut self, key: &str, value: &str) {
+        self.encoder.add_str(key);
+        self.encoder.add_str(value);
+    }
+
+    pub fn add_bytes(&mut self, key: &str, value: &[u8]) {
+        self.encoder.add_str(key);
+        self.encoder.add_bytes(value);
+    }
+
+    pub fn add_int(&mut self, key: &str, value: i64) {
+        self.encoder.add_str(key);
+        self.encoder.add_int(value);
     }
 }
 
-impl From<Vec<u8>> for Entry {
-    fn from(v: Vec<u8>) -> Self {
-        Cow::from(v).into()
+impl<E: Encoder> Drop for Dict<'_, E> {
+    fn drop(&mut self) {
+        self.encoder.add_byte(b'e');
     }
 }
 
-impl From<&'static [u8]> for Entry {
-    fn from(v: &'static [u8]) -> Self {
-        Cow::from(v).into()
+impl Encoder for Vec<u8> {
+    fn add_int(&mut self, value: i64) {
+        write!(self, "i{}e", value).unwrap();
     }
-}
 
-impl From<&'static str> for Entry {
-    fn from(v: &'static str) -> Self {
-        v.as_bytes().into()
+    fn add_byte(&mut self, value: u8) {
+        self.push(value);
     }
-}
 
-impl From<String> for Entry {
-    fn from(v: String) -> Self {
-        v.into_bytes().into()
+    fn add_bytes(&mut self, value: &[u8]) {
+        write!(self, "{}:", value.len()).unwrap();
+        self.extend(value);
     }
-}
 
-impl From<Vec<Self>> for Entry {
-    fn from(v: Vec<Self>) -> Self {
-        Self(Inner::List(v))
+    fn add_str(&mut self, value: &str) {
+        self.add_bytes(value.as_bytes());
     }
-}
 
-impl From<BTreeMap<&'static str, Self>> for Entry {
-    fn from(v: BTreeMap<&'static str, Self>) -> Self {
-        Self(Inner::Dict(v))
+    fn add_list(&mut self) -> List<Self> {
+        List::new(self)
+    }
+
+    fn add_dict(&mut self) -> Dict<Self> {
+        Dict::new(self)
     }
 }
 
@@ -144,31 +130,37 @@ mod tests {
 
     #[test]
     fn encode_int() {
-        let b = Entry::from(10).to_vec();
-        assert_eq!(b"i10e", &b[..]);
+        let mut e = vec![];
+        e.add_int(10);
+        assert_eq!(b"i10e", &e[..]);
     }
 
     #[test]
     fn encode_str() {
-        let b = Entry::from("1000").to_vec();
-        assert_eq!(b"4:1000", &b[..]);
+        let mut e = vec![];
+        e.add_str("1000");
+        assert_eq!(b"4:1000", &e[..]);
     }
 
     #[test]
     fn encode_dict() {
-        let mut dict = BTreeMap::new();
-        dict.insert("Hello", "World".into());
-        let b = Entry::from(dict).to_vec();
-        assert_eq!(b"d5:Hello5:Worlde", &b[..]);
+        let mut e = vec![];
+        {
+            let mut dict = e.add_dict();
+            dict.add_str("Hello", "World");
+        }
+        assert_eq!(b"d5:Hello5:Worlde", &e[..]);
     }
 
     #[test]
     fn encode_list() {
-        let mut list: Vec<Entry> = vec![];
-        list.push("Hello".into());
-        list.push("World".into());
-        list.push(123.into());
-        let b = Entry::from(list).to_vec();
-        assert_eq!(b"l5:Hello5:Worldi123ee", &b[..]);
+        let mut e = vec![];
+        {
+            let mut list = e.add_list();
+            list.add_str("Hello");
+            list.add_str("World");
+            list.add_int(123);
+        }
+        assert_eq!(b"l5:Hello5:Worldi123ee", &e[..]);
     }
 }
