@@ -1,109 +1,114 @@
 use std::io::Write;
 
+/// Bencode Encoder trait
 pub trait Encoder {
+    /// Encode an integer value
     fn add_int(&mut self, value: i64);
 
-    fn add_byte(&mut self, value: u8);
-
+    /// Encode a byte slice.
     fn add_bytes(&mut self, value: &[u8]);
 
+    /// Encode string slice
     fn add_str(&mut self, value: &str);
 
-    fn add_list(&mut self) -> List<Self>
-    where
-        Self: Sized;
+    /// Create a new `List` in this `Encoder`.
+    fn add_list(&mut self) -> List<'_>;
 
-    fn add_dict(&mut self) -> Dict<Self>
-    where
-        Self: Sized;
+    /// Create a new `Dict` in this `Encoder`
+    fn add_dict(&mut self) -> Dict<'_>;
 }
 
-pub struct List<'a, E: Encoder> {
-    encoder: &'a mut E,
+/// Bencode List representation
+pub struct List<'a> {
+    buf: &'a mut Vec<u8>,
 }
 
-impl<E: Encoder> List<'_, E> {
-    pub fn new(encoder: &mut E) -> List<E> {
-        encoder.add_byte(b'l');
-        List { encoder }
-    }
-
-    pub fn add_list(&mut self) -> List<E> {
-        List::new(&mut self.encoder)
-    }
-
-    pub fn add_dict(&mut self) -> Dict<E> {
-        Dict::new(&mut self.encoder)
-    }
-
-    pub fn add_str(&mut self, value: &str) {
-        self.encoder.add_str(value);
-    }
-
-    pub fn add_bytes(&mut self, value: &[u8]) {
-        self.encoder.add_bytes(value);
-    }
-
-    pub fn add_int(&mut self, value: i64) {
-        self.encoder.add_int(value);
+impl List<'_> {
+    pub fn new(buf: &mut Vec<u8>) -> List<'_> {
+        buf.push(b'l');
+        List { buf }
     }
 }
 
-impl<E: Encoder> Drop for List<'_, E> {
+impl Encoder for List<'_> {
+    fn add_list(&mut self) -> List<'_> {
+        List::new(self.buf)
+    }
+
+    fn add_dict(&mut self) -> Dict<'_> {
+        Dict::new(self.buf)
+    }
+
+    fn add_str(&mut self, value: &str) {
+        self.buf.add_str(value);
+    }
+
+    fn add_bytes(&mut self, value: &[u8]) {
+        self.buf.add_bytes(value);
+    }
+
+    fn add_int(&mut self, value: i64) {
+        self.buf.add_int(value);
+    }
+}
+
+impl Drop for List<'_> {
     fn drop(&mut self) {
-        self.encoder.add_byte(b'e');
+        self.buf.push(b'e');
     }
 }
 
-pub struct Dict<'a, E: Encoder> {
-    encoder: &'a mut E,
+/// Bencode Dictionary representation
+pub struct Dict<'a> {
+    buf: &'a mut Vec<u8>,
 }
 
-impl<E: Encoder> Dict<'_, E> {
-    pub fn new(encoder: &mut E) -> Dict<E> {
-        encoder.add_byte(b'd');
-        Dict { encoder }
+impl Dict<'_> {
+    pub fn new(buf: &mut Vec<u8>) -> Dict<'_> {
+        buf.push(b'd');
+        Dict { buf }
     }
 
-    pub fn add_list(&mut self, key: &str) -> List<E> {
-        self.encoder.add_str(key);
-        List::new(&mut self.encoder)
+    /// Create a new `List` for given key inside this dictionary.
+    pub fn add_list(&mut self, key: &str) -> List<'_> {
+        self.buf.add_str(key);
+        List::new(self.buf)
     }
 
-    pub fn add_dict(&mut self, key: &str) -> Dict<E> {
-        self.encoder.add_str(key);
-        Dict::new(&mut self.encoder)
+    /// Create a new `Dict` for given key inside this dictionary.
+    pub fn add_dict(&mut self, key: &str) -> Dict<'_> {
+        self.buf.add_str(key);
+        Dict::new(self.buf)
     }
 
+    /// Encode a new string slice for given key inside this dictionary.
     pub fn add_str(&mut self, key: &str, value: &str) {
-        self.encoder.add_str(key);
-        self.encoder.add_str(value);
+        self.buf.add_str(key);
+        self.buf.add_str(value);
     }
 
+    /// Encode a new byte slice for given key inside this dictionary.
     pub fn add_bytes(&mut self, key: &str, value: &[u8]) {
-        self.encoder.add_str(key);
-        self.encoder.add_bytes(value);
+        self.buf.add_str(key);
+        self.buf.add_bytes(value);
     }
 
+    /// Encode a new integer for given key inside this dictionary.
     pub fn add_int(&mut self, key: &str, value: i64) {
-        self.encoder.add_str(key);
-        self.encoder.add_int(value);
+        self.buf.add_str(key);
+        self.buf.add_int(value);
     }
 }
 
-impl<E: Encoder> Drop for Dict<'_, E> {
+impl Drop for Dict<'_> {
     fn drop(&mut self) {
-        self.encoder.add_byte(b'e');
+        self.buf.push(b'e');
     }
 }
 
 impl Encoder for Vec<u8> {
     fn add_int(&mut self, value: i64) {
         write!(self, "i{}e", value).unwrap();
-    }
-
-    fn add_byte(&mut self, value: u8) {
-        self.push(value);
     }
 
     fn add_bytes(&mut self, value: &[u8]) {
@@ -115,11 +120,11 @@ impl Encoder for Vec<u8> {
         self.add_bytes(value.as_bytes());
     }
 
-    fn add_list(&mut self) -> List<Self> {
+    fn add_list(&mut self) -> List<'_> {
         List::new(self)
     }
 
-    fn add_dict(&mut self) -> Dict<Self> {
+    fn add_dict(&mut self) -> Dict<'_> {
         Dict::new(self)
     }
 }
