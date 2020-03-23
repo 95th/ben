@@ -1,5 +1,3 @@
-use std::io::Write;
-
 /// Bencode Encoder trait
 pub trait Encoder {
     /// Encode an integer value
@@ -109,11 +107,14 @@ impl Dict<'_> {
 
 impl Encoder for Vec<u8> {
     fn add_int(&mut self, value: i64) {
-        write!(self, "i{}e", value).unwrap();
+        self.push(b'i');
+        itoa::write(&mut *self, value).unwrap();
+        self.push(b'e');
     }
 
     fn add_bytes(&mut self, value: &[u8]) {
-        write!(self, "{}:", value.len()).unwrap();
+        itoa::write(&mut *self, value.len()).unwrap();
+        self.push(b':');
         self.extend(value);
     }
 

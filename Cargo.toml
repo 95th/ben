@@ -7,3 +7,4 @@ description = "A minimalistic Bencode parser"
 license = "MIT"
 
 [dependencies]
+itoa = "0.4.5"
