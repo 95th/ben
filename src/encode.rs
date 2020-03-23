@@ -1,13 +1,17 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 
 /// Entry to use for encoding data into bencode format.
 #[derive(Debug, Clone, PartialOrd, PartialEq)]
-pub enum Entry {
+pub struct Entry(Inner<Self>);
+
+#[derive(Debug, Clone, PartialOrd, PartialEq)]
+enum Inner<T> {
     Int(i64),
-    Bytes(Vec<u8>),
-    List(Vec<Self>),
-    Dict(BTreeMap<&'static str, Self>),
+    Bytes(Cow<'static, [u8]>),
+    List(Vec<T>),
+    Dict(BTreeMap<&'static str, T>),
 }
 
 impl Entry {
@@ -44,33 +48,34 @@ impl Entry {
     /// ```
     pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
         enum Token<'a> {
-            B(&'a Entry),
+            B(&'a Inner<Entry>),
             S(&'a str),
             E,
         }
 
+        use Inner::*;
         use Token::*;
-        let mut stack = vec![B(self)];
+        let mut stack = vec![B(&self.0)];
         while !stack.is_empty() {
             match stack.pop().unwrap() {
                 Token::B(v) => match v {
-                    Self::Int(n) => {
+                    Int(n) => {
                         write!(w, "i{}e", n)?;
                     }
-                    Self::Bytes(v) => {
+                    Bytes(v) => {
                         write!(w, "{}:", v.len())?;
-                        w.write_all(v)?;
+                        w.write_all(&v[..])?;
                     }
-                    Self::List(v) => {
+                    List(v) => {
                         write!(w, "l")?;
                         stack.push(E);
-                        stack.extend(v.iter().rev().map(|e| B(e)));
+                        stack.extend(v.iter().rev().map(|e| B(&e.0)));
                     }
-                    Self::Dict(m) => {
+                    Dict(m) => {
                         write!(w, "d")?;
                         stack.push(E);
                         for (k, v) in m.iter().rev() {
-                            stack.push(B(v));
+                            stack.push(B(&v.0));
                             stack.push(S(k));
                         }
                     }
@@ -87,24 +92,30 @@ impl Entry {
 
 impl From<i64> for Entry {
     fn from(v: i64) -> Self {
-        Self::Int(v)
+        Self(Inner::Int(v))
+    }
+}
+
+impl From<Cow<'static, [u8]>> for Entry {
+    fn from(v: Cow<'static, [u8]>) -> Self {
+        Self(Inner::Bytes(v))
     }
 }
 
 impl From<Vec<u8>> for Entry {
     fn from(v: Vec<u8>) -> Self {
-        Self::Bytes(v)
+        Cow::from(v).into()
     }
 }
 
-impl From<&[u8]> for Entry {
-    fn from(v: &[u8]) -> Self {
-        v.to_vec().into()
+impl From<&'static [u8]> for Entry {
+    fn from(v: &'static [u8]) -> Self {
+        Cow::from(v).into()
     }
 }
 
-impl From<&str> for Entry {
-    fn from(v: &str) -> Self {
+impl From<&'static str> for Entry {
+    fn from(v: &'static str) -> Self {
         v.as_bytes().into()
     }
 }
@@ -117,13 +128,13 @@ impl From<String> for Entry {
 
 impl From<Vec<Self>> for Entry {
     fn from(v: Vec<Self>) -> Self {
-        Self::List(v)
+        Self(Inner::List(v))
     }
 }
 
 impl From<BTreeMap<&'static str, Self>> for Entry {
     fn from(v: BTreeMap<&'static str, Self>) -> Self {
-        Self::Dict(v)
+        Self(Inner::Dict(v))
     }
 }
 
