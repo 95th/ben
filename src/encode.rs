@@ -52,8 +52,12 @@ impl List<'_> {
         self.buf.add_int(value);
     }
 
-    /// Finish this list. User must call this method after adding the entries.
-    pub fn finish(self) {
+    /// Finish this list
+    pub fn finish(self) {}
+}
+
+impl Drop for List<'_> {
+    fn drop(&mut self) {
         self.buf.push(b'e');
     }
 }
@@ -99,8 +103,12 @@ impl Dict<'_> {
         self.buf.add_int(value);
     }
 
-    /// Finish this dict. User must call this method after adding the entries.
-    pub fn finish(self) {
+    /// Finish this dict
+    pub fn finish(self) {}
+}
+
+impl Drop for Dict<'_> {
+    fn drop(&mut self) {
         self.buf.push(b'e');
     }
 }
@@ -159,6 +167,15 @@ mod tests {
     }
 
     #[test]
+    fn encode_dict_drop() {
+        let mut e = vec![];
+        let mut dict = e.add_dict();
+        dict.add_str("Hello", "World");
+        drop(dict);
+        assert_eq!(b"d5:Hello5:Worlde", &e[..]);
+    }
+
+    #[test]
     fn encode_list() {
         let mut e = vec![];
         let mut list = e.add_list();
@@ -166,6 +183,17 @@ mod tests {
         list.add_str("World");
         list.add_int(123);
         list.finish();
+        assert_eq!(b"l5:Hello5:Worldi123ee", &e[..]);
+    }
+
+    #[test]
+    fn encode_list_drop() {
+        let mut e = vec![];
+        let mut list = e.add_list();
+        list.add_str("Hello");
+        list.add_str("World");
+        list.add_int(123);
+        drop(list);
         assert_eq!(b"l5:Hello5:Worldi123ee", &e[..]);
     }
 }
