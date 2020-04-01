@@ -1,19 +1,33 @@
-use sealed::SealedEncoder;
+use sealed::RawEncoderPriv;
 
 mod sealed {
-    pub trait SealedEncoder {
-        fn add_byte(&mut self, value: u8);
+    use itoa::Integer;
+
+    pub trait RawEncoderPriv {
+        fn add_byte_raw(&mut self, value: u8);
+
+        fn add_int_raw<I: Integer>(&mut self, value: I);
+
+        fn add_bytes_raw(&mut self, value: &[u8]);
     }
 
-    impl SealedEncoder for Vec<u8> {
-        fn add_byte(&mut self, value: u8) {
+    impl RawEncoderPriv for Vec<u8> {
+        fn add_byte_raw(&mut self, value: u8) {
             self.push(value);
+        }
+
+        fn add_int_raw<I: Integer>(&mut self, value: I) {
+            itoa::write(&mut *self, value).unwrap();
+        }
+
+        fn add_bytes_raw(&mut self, value: &[u8]) {
+            self.extend(value);
         }
     }
 }
 
 /// Bencode Encoder trait
-pub trait Encoder: SealedEncoder {
+pub trait Encoder: RawEncoderPriv {
     /// Encode an integer value
     fn add_int(&mut self, value: i64);
 
@@ -34,17 +48,17 @@ pub trait Encoder: SealedEncoder {
         Self: Sized;
 }
 
-impl Encoder for Vec<u8> {
+impl<T: RawEncoderPriv> Encoder for T {
     fn add_int(&mut self, value: i64) {
-        self.add_byte(b'i');
-        itoa::write(&mut *self, value).unwrap();
-        self.add_byte(b'e');
+        self.add_byte_raw(b'i');
+        self.add_int_raw(value);
+        self.add_byte_raw(b'e');
     }
 
     fn add_bytes(&mut self, value: &[u8]) {
-        itoa::write(&mut *self, value.len()).unwrap();
-        self.add_byte(b':');
-        self.extend(value);
+        self.add_int_raw(value.len());
+        self.add_byte_raw(b':');
+        self.add_bytes_raw(value);
     }
 
     fn add_str(&mut self, value: &str) {
@@ -67,7 +81,7 @@ pub struct List<'a, E: Encoder> {
 
 impl<E: Encoder> List<'_, E> {
     pub fn new(enc: &mut E) -> List<'_, E> {
-        enc.add_byte(b'l');
+        enc.add_byte_raw(b'l');
         List { enc }
     }
 
@@ -102,7 +116,7 @@ impl<E: Encoder> List<'_, E> {
 
 impl<E: Encoder> Drop for List<'_, E> {
     fn drop(&mut self) {
-        self.enc.add_byte(b'e');
+        self.enc.add_byte_raw(b'e');
     }
 }
 
@@ -113,7 +127,7 @@ pub struct Dict<'a, E: Encoder> {
 
 impl<E: Encoder> Dict<'_, E> {
     pub fn new(enc: &mut E) -> Dict<'_, E> {
-        enc.add_byte(b'd');
+        enc.add_byte_raw(b'd');
         Dict { enc }
     }
 
@@ -153,7 +167,7 @@ impl<E: Encoder> Dict<'_, E> {
 
 impl<E: Encoder> Drop for Dict<'_, E> {
     fn drop(&mut self) {
-        self.enc.add_byte(b'e');
+        self.enc.add_byte_raw(b'e');
     }
 }
 
