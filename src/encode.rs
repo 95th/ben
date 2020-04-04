@@ -1,18 +1,58 @@
-/// Bencode Encoder trait
+/// A trait for objects that can be bencoded.
+///
+/// Types implementing `Encode` are able to be encoded with an instance of
+/// `Encoder`.
+pub trait Encode {
+    /// Feed this value into given `Encoder`.
+    fn encode<E: Encoder>(&self, enc: &mut E);
+
+    /// Encode this value into a vector of bytes.
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut encoder = vec![];
+        self.encode(&mut encoder);
+        encoder
+    }
+}
+
+impl<T: Encode> Encode for &T {
+    fn encode<E: Encoder>(&self, enc: &mut E) {
+        (&**self).encode(enc);
+    }
+}
+
+impl Encode for &[u8] {
+    fn encode<E: Encoder>(&self, enc: &mut E) {
+        enc.add_bytes(self);
+    }
+}
+
+impl Encode for &str {
+    fn encode<E: Encoder>(&self, enc: &mut E) {
+        enc.add_str(self);
+    }
+}
+
+impl Encode for i64 {
+    fn encode<E: Encoder>(&self, enc: &mut E) {
+        enc.add_int(*self);
+    }
+}
+
+/// Bencode Encoder trait.
 pub trait Encoder {
-    /// Encode an integer value
+    /// Encode an integer value.
     fn add_int(&mut self, value: i64);
 
     /// Encode a byte slice.
     fn add_bytes(&mut self, value: &[u8]);
 
-    /// Encode string slice
+    /// Encode string slice.
     fn add_str(&mut self, value: &str);
 
     /// Create a new `List` in this `Encoder`.
     fn add_list(&mut self) -> List<'_>;
 
-    /// Create a new `Dict` in this `Encoder`
+    /// Create a new `Dict` in this `Encoder`.
     fn add_dict(&mut self) -> Dict<'_>;
 }
 
@@ -42,7 +82,7 @@ impl Encoder for Vec<u8> {
     }
 }
 
-/// Bencode List representation
+/// Bencode List representation.
 pub struct List<'a> {
     enc: &'a mut Vec<u8>,
 }
@@ -53,32 +93,22 @@ impl List<'_> {
         List { enc }
     }
 
-    /// Create a new `List` in this list
+    /// `Encode` a value in this list.
+    pub fn add<E: Encode>(&mut self, value: E) {
+        value.encode(self.enc);
+    }
+
+    /// Create a new `List` in this list.
     pub fn add_list(&mut self) -> List<'_> {
         self.enc.add_list()
     }
 
-    /// Create a new `Dict` in this list
+    /// Create a new `Dict` in this list.
     pub fn add_dict(&mut self) -> Dict<'_> {
         self.enc.add_dict()
     }
 
-    /// Encode string slice
-    pub fn add_str(&mut self, value: &str) {
-        self.enc.add_str(value);
-    }
-
-    /// Encode a byte slice.
-    pub fn add_bytes(&mut self, value: &[u8]) {
-        self.enc.add_bytes(value);
-    }
-
-    /// Encode an integer value
-    pub fn add_int(&mut self, value: i64) {
-        self.enc.add_int(value);
-    }
-
-    /// Finish building this list
+    /// Finish building this list.
     pub fn finish(self) {}
 }
 
@@ -111,25 +141,13 @@ impl Dict<'_> {
         self.enc.add_dict()
     }
 
-    /// Encode a new string slice for given key inside this dictionary.
-    pub fn add_str(&mut self, key: &str, value: &str) {
+    /// `Encode` the value for given key inside this dictionary.
+    pub fn add<E: Encode>(&mut self, key: &str, value: E) {
         self.enc.add_str(key);
-        self.enc.add_str(value);
+        value.encode(self.enc);
     }
 
-    /// Encode a new byte slice for given key inside this dictionary.
-    pub fn add_bytes(&mut self, key: &str, value: &[u8]) {
-        self.enc.add_str(key);
-        self.enc.add_bytes(value);
-    }
-
-    /// Encode a new integer for given key inside this dictionary.
-    pub fn add_int(&mut self, key: &str, value: i64) {
-        self.enc.add_str(key);
-        self.enc.add_int(value);
-    }
-
-    /// Finish building this dict
+    /// Finish building this dict.
     pub fn finish(self) {}
 }
 
@@ -161,7 +179,7 @@ mod tests {
     fn encode_dict() {
         let mut e = vec![];
         let mut dict = e.add_dict();
-        dict.add_str("Hello", "World");
+        dict.add("Hello", "World");
         dict.finish();
         assert_eq!(b"d5:Hello5:Worlde", &e[..]);
     }
@@ -170,7 +188,7 @@ mod tests {
     fn encode_dict_drop() {
         let mut e = vec![];
         let mut dict = e.add_dict();
-        dict.add_str("Hello", "World");
+        dict.add("Hello", "World");
         drop(dict);
         assert_eq!(b"d5:Hello5:Worlde", &e[..]);
     }
@@ -179,9 +197,9 @@ mod tests {
     fn encode_list() {
         let mut e = vec![];
         let mut list = e.add_list();
-        list.add_str("Hello");
-        list.add_str("World");
-        list.add_int(123);
+        list.add("Hello");
+        list.add("World");
+        list.add(123);
         list.finish();
         assert_eq!(b"l5:Hello5:Worldi123ee", &e[..]);
     }
@@ -190,10 +208,46 @@ mod tests {
     fn encode_list_drop() {
         let mut e = vec![];
         let mut list = e.add_list();
-        list.add_str("Hello");
-        list.add_str("World");
-        list.add_int(123);
+        list.add("Hello");
+        list.add("World");
+        list.add(123);
         drop(list);
         assert_eq!(b"l5:Hello5:Worldi123ee", &e[..]);
+    }
+
+    #[test]
+    fn encode_custom() {
+        enum T {
+            A(u8, u8),
+            B { x: u32, y: &'static str },
+        }
+
+        impl Encode for T {
+            fn encode<E: Encoder>(&self, encoder: &mut E) {
+                match *self {
+                    Self::A(a, b) => {
+                        let mut dict = encoder.add_dict();
+                        dict.add("0", a as i64);
+                        dict.add("1", b as i64);
+                    }
+                    Self::B { x, y } => {
+                        let mut dict = encoder.add_dict();
+                        dict.add("x", x as i64);
+                        dict.add("y", y);
+                    }
+                }
+            }
+        }
+
+        let mut e = vec![];
+        let mut list = e.add_list();
+        list.add(T::A(1, 2));
+        list.add(T::B {
+            x: 1,
+            y: "Hello world",
+        });
+
+        drop(list);
+        assert_eq!(&b"ld1:0i1e1:1i2eed1:xi1e1:y11:Hello worldee"[..], &e[..]);
     }
 }
