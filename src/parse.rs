@@ -77,6 +77,8 @@ impl fmt::Display for Error {
     }
 }
 
+impl std::error::Error for Error {}
+
 /// Bencode Parser
 pub struct Parser {
     pos: usize,
