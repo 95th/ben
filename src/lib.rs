@@ -8,6 +8,6 @@ mod parse;
 
 pub use decode::Node;
 pub use encode::{Encode, Encoder};
-pub use parse::Error;
+pub use parse::{Error, Token};
 
 pub type Result<T> = std::result::Result<T, Error>;

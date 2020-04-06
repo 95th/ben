@@ -333,7 +333,7 @@ impl<'a> List<'a> {
     }
 
     /// Returns the `Dict` at the given index.
-    pub fn get_dict(&self, i: usize) -> Option<Dict<'_>> {
+    pub fn get_dict(&self, i: usize) -> Option<Dict<'a>> {
         Some(Dict {
             buf: self.buf,
             idx: self.find_idx(i)?,
@@ -342,7 +342,7 @@ impl<'a> List<'a> {
     }
 
     /// Returns the `List` at the given index.
-    pub fn get_list(&self, i: usize) -> Option<List<'_>> {
+    pub fn get_list(&self, i: usize) -> Option<List<'a>> {
         Some(List {
             buf: self.buf,
             idx: self.find_idx(i)?,
@@ -351,7 +351,7 @@ impl<'a> List<'a> {
     }
 
     /// Returns the `str` at the given index.
-    pub fn get_str(&self, i: usize) -> Option<&str> {
+    pub fn get_str(&self, i: usize) -> Option<&'a str> {
         self.get(i)?.as_str()
     }
 
@@ -448,7 +448,7 @@ impl<'a> Dict<'a> {
     }
 
     /// Returns the `str` for the given key.
-    pub fn get_str(&self, key: &[u8]) -> Option<&str> {
+    pub fn get_str(&self, key: &[u8]) -> Option<&'a str> {
         self.get(key)?.as_str()
     }
 
