@@ -1,3 +1,6 @@
+use bytes::BufMut;
+use itoa::Buffer;
+
 /// A trait for objects that can be bencoded.
 ///
 /// Types implementing `Encode` are able to be encoded with an instance of
@@ -45,7 +48,7 @@ impl Encode for i64 {
 }
 
 /// Bencode Encoder trait.
-pub trait Encoder {
+pub trait Encoder: BufMut {
     /// Encode an integer value.
     fn add_int(&mut self, value: i64);
 
@@ -56,46 +59,52 @@ pub trait Encoder {
     fn add_str(&mut self, value: &str);
 
     /// Create a new `List` in this `Encoder`.
-    fn add_list(&mut self) -> List<'_>;
+    fn add_list(&mut self) -> List<'_, Self>
+    where
+        Self: Sized;
 
     /// Create a new `Dict` in this `Encoder`.
-    fn add_dict(&mut self) -> Dict<'_>;
+    fn add_dict(&mut self) -> Dict<'_, Self>
+    where
+        Self: Sized;
 }
 
-impl Encoder for Vec<u8> {
+impl<T: BufMut> Encoder for T {
     fn add_int(&mut self, value: i64) {
-        self.push(b'i');
-        itoa::write(&mut *self, value).unwrap();
-        self.push(b'e');
+        self.put_u8(b'i');
+        let mut buf = Buffer::new();
+        self.put_slice(buf.format(value).as_bytes());
+        self.put_u8(b'e');
     }
 
     fn add_bytes(&mut self, value: &[u8]) {
-        itoa::write(&mut *self, value.len()).unwrap();
-        self.push(b':');
-        self.extend(value);
+        let mut buf = Buffer::new();
+        self.put_slice(buf.format(value.len()).as_bytes());
+        self.put_u8(b':');
+        self.put_slice(value);
     }
 
     fn add_str(&mut self, value: &str) {
         self.add_bytes(value.as_bytes());
     }
 
-    fn add_list(&mut self) -> List<'_> {
+    fn add_list(&mut self) -> List<'_, T> {
         List::new(self)
     }
 
-    fn add_dict(&mut self) -> Dict<'_> {
+    fn add_dict(&mut self) -> Dict<'_, T> {
         Dict::new(self)
     }
 }
 
 /// Bencode List representation.
-pub struct List<'a> {
-    enc: &'a mut Vec<u8>,
+pub struct List<'a, T: BufMut> {
+    enc: &'a mut T,
 }
 
-impl List<'_> {
-    pub fn new(enc: &mut Vec<u8>) -> List<'_> {
-        enc.push(b'l');
+impl<T: BufMut> List<'_, T> {
+    pub fn new(enc: &mut T) -> List<'_, T> {
+        enc.put_u8(b'l');
         List { enc }
     }
 
@@ -105,12 +114,12 @@ impl List<'_> {
     }
 
     /// Create a new `List` in this list.
-    pub fn add_list(&mut self) -> List<'_> {
+    pub fn add_list(&mut self) -> List<'_, T> {
         self.enc.add_list()
     }
 
     /// Create a new `Dict` in this list.
-    pub fn add_dict(&mut self) -> Dict<'_> {
+    pub fn add_dict(&mut self) -> Dict<'_, T> {
         self.enc.add_dict()
     }
 
@@ -118,31 +127,31 @@ impl List<'_> {
     pub fn finish(self) {}
 }
 
-impl Drop for List<'_> {
+impl<T: BufMut> Drop for List<'_, T> {
     fn drop(&mut self) {
-        self.enc.push(b'e');
+        self.enc.put_u8(b'e');
     }
 }
 
 /// Bencode Dictionary representation.
-pub struct Dict<'a> {
-    enc: &'a mut Vec<u8>,
+pub struct Dict<'a, T: BufMut> {
+    enc: &'a mut T,
 }
 
-impl Dict<'_> {
-    pub fn new(enc: &mut Vec<u8>) -> Dict<'_> {
-        enc.push(b'd');
+impl<T: BufMut> Dict<'_, T> {
+    pub fn new(enc: &mut T) -> Dict<'_, T> {
+        enc.put_u8(b'd');
         Dict { enc }
     }
 
     /// Create a new `List` for given key inside this dictionary.
-    pub fn add_list(&mut self, key: &str) -> List<'_> {
+    pub fn add_list(&mut self, key: &str) -> List<'_, T> {
         self.enc.add_str(key);
         self.enc.add_list()
     }
 
     /// Create a new `Dict` for given key inside this dictionary.
-    pub fn add_dict(&mut self, key: &str) -> Dict<'_> {
+    pub fn add_dict(&mut self, key: &str) -> Dict<'_, T> {
         self.enc.add_str(key);
         self.enc.add_dict()
     }
@@ -157,9 +166,9 @@ impl Dict<'_> {
     pub fn finish(self) {}
 }
 
-impl Drop for Dict<'_> {
+impl<T: BufMut> Drop for Dict<'_, T> {
     fn drop(&mut self) {
-        self.enc.push(b'e');
+        self.enc.put_u8(b'e');
     }
 }
 
