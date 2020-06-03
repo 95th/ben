@@ -20,6 +20,12 @@ impl<T: Encode> Encode for &T {
     }
 }
 
+impl<T: Encode> Encode for Box<T> {
+    fn encode<E: Encoder>(&self, enc: &mut E) {
+        (&**self).encode(enc);
+    }
+}
+
 impl Encode for &[u8] {
     fn encode<E: Encoder>(&self, enc: &mut E) {
         enc.add_bytes(self);
