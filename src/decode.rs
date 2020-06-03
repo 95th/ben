@@ -336,7 +336,7 @@ impl<'a> List<'a> {
     pub fn get_dict(&self, i: usize) -> Option<Dict<'a>> {
         Some(Dict {
             buf: self.buf,
-            idx: self.find_idx(i)?,
+            idx: self.get(i)?.as_dict()?.idx,
             tokens: self.tokens,
         })
     }
@@ -345,7 +345,7 @@ impl<'a> List<'a> {
     pub fn get_list(&self, i: usize) -> Option<List<'a>> {
         Some(List {
             buf: self.buf,
-            idx: self.find_idx(i)?,
+            idx: self.get(i)?.as_list()?.idx,
             tokens: self.tokens,
         })
     }
@@ -433,7 +433,7 @@ impl<'a> Dict<'a> {
     pub fn get_dict(&self, key: &[u8]) -> Option<Dict<'a>> {
         Some(Dict {
             buf: self.buf,
-            idx: self.get(key)?.idx,
+            idx: self.get(key)?.as_dict()?.idx,
             tokens: self.tokens,
         })
     }
@@ -442,7 +442,7 @@ impl<'a> Dict<'a> {
     pub fn get_list(&self, key: &[u8]) -> Option<List<'a>> {
         Some(List {
             buf: self.buf,
-            idx: self.get(key)?.idx,
+            idx: self.get(key)?.as_list()?.idx,
             tokens: self.tokens,
         })
     }
@@ -642,5 +642,23 @@ mod tests {
         let dict = node.as_dict().unwrap();
         let b = dict.get(b"b").unwrap();
         assert_eq!(2, b.as_int().unwrap());
+    }
+
+    #[test]
+    fn dict_get_invalid() {
+        let s = b"d1:ai1e1:bi2ee";
+        let node = Node::parse(s).unwrap();
+        let dict = node.as_dict().unwrap();
+        assert!(dict.get_dict(b"b").is_none());
+        assert!(dict.get_list(b"b").is_none());
+    }
+
+    #[test]
+    fn list_get_invalid() {
+        let s = b"l1:a1:be";
+        let node = Node::parse(s).unwrap();
+        let dict = node.as_list().unwrap();
+        assert!(dict.get_dict(0).is_none());
+        assert!(dict.get_list(1).is_none());
     }
 }
