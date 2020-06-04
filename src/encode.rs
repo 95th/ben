@@ -57,6 +57,25 @@ impl Encode for i64 {
     }
 }
 
+pub struct AddBytes<'a, T: BufMut> {
+    enc: &'a mut T,
+    len: usize,
+    written: usize,
+}
+
+impl<'a, T: BufMut> AddBytes<'a, T> {
+    pub fn add(&mut self, buf: &[u8]) {
+        self.written += buf.len();
+        self.enc.put_slice(buf);
+    }
+}
+
+impl<'a, T: BufMut> Drop for AddBytes<'a, T> {
+    fn drop(&mut self) {
+        assert_eq!(self.len, self.written)
+    }
+}
+
 /// Bencode Encoder trait.
 pub trait Encoder: BufMut {
     /// Encode an integer value.
@@ -64,6 +83,10 @@ pub trait Encoder: BufMut {
 
     /// Encode a byte slice.
     fn add_bytes(&mut self, value: &[u8]);
+
+    fn add_n_bytes(&mut self, len: usize) -> AddBytes<'_, Self>
+    where
+        Self: Sized;
 
     /// Encode string slice.
     fn add_str(&mut self, value: &str);
@@ -92,6 +115,17 @@ impl<T: BufMut> Encoder for T {
         self.put_slice(buf.format(value.len()).as_bytes());
         self.put_u8(b':');
         self.put_slice(value);
+    }
+
+    fn add_n_bytes(&mut self, len: usize) -> AddBytes<'_, Self> {
+        let mut buf = Buffer::new();
+        self.put_slice(buf.format(len).as_bytes());
+        self.put_u8(b':');
+        AddBytes {
+            enc: self,
+            len,
+            written: 0,
+        }
     }
 
     fn add_str(&mut self, value: &str) {
@@ -274,5 +308,23 @@ mod tests {
 
         drop(list);
         assert_eq!(&b"ld1:0i1e1:1i2eed1:xi1e1:y11:Hello worldee"[..], &e[..]);
+    }
+
+    #[test]
+    fn encode_add_bytes2_ok() {
+        let mut e = vec![];
+        let mut bytes = e.add_n_bytes(4);
+        bytes.add(&[0; 2]);
+        bytes.add(&[0; 2]);
+        drop(bytes);
+        assert_eq!(&b"4:\x00\x00\x00\x00"[..], &e[..]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn encode_add_bytes2_panic() {
+        let mut e = vec![];
+        let mut bytes = e.add_n_bytes(4);
+        bytes.add(&[0; 100]);
     }
 }
