@@ -57,6 +57,23 @@ impl Encode for i64 {
     }
 }
 
+macro_rules! impl_arr {
+    ( $($len: expr),+ ) => {
+        $(
+            impl Encode for [u8; $len] {
+                fn encode<E: Encoder>(&self, enc: &mut E) {
+                    enc.add_bytes(&self[..]);
+                }
+            }
+        )+
+    };
+}
+
+impl_arr![
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+    28, 29, 30
+];
+
 pub struct AddBytes<'a, T: BufMut> {
     enc: &'a mut T,
     len: usize,
