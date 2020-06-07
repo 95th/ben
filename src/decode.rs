@@ -661,4 +661,10 @@ mod tests {
         assert!(dict.get_dict(0).is_none());
         assert!(dict.get_list(1).is_none());
     }
+
+    #[test]
+    fn decode_empty() {
+        let err = Node::parse(&[]).unwrap_err();
+        assert_eq!(err, Error::Eof);
+    }
 }

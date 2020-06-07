@@ -144,6 +144,10 @@ impl Parser {
     /// Run Bencode parser. It parses a bencoded data string into given vector of tokens, each
     /// describing a single Bencode object.
     pub fn parse_prefix_in(mut self, buf: &[u8], tokens: &mut Vec<Token>) -> Result<usize, Error> {
+        if buf.is_empty() {
+            return Err(Error::Eof);
+        }
+
         tokens.clear();
         let mut depth = 0;
         while self.pos < buf.len() {
