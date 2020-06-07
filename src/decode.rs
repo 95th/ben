@@ -10,13 +10,29 @@ pub struct Node<'a> {
     idx: usize,
 }
 
+fn as_str<'a>(node: &Node<'a>) -> Option<&'a str> {
+    let token = &node.tokens[node.idx];
+    if let TokenKind::ByteStr = token.kind {
+        let bytes = &node.buf[token.range()];
+        if let Ok(s) = std::str::from_utf8(bytes) {
+            if s.chars().all(|c| {
+                c.is_ascii_alphanumeric() || c.is_ascii_punctuation() || c.is_ascii_whitespace()
+            }) {
+                return Some(s);
+            }
+        }
+    }
+
+    return None;
+}
+
 impl fmt::Debug for Node<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind() {
             TokenKind::Int => write!(f, "{}", self.as_int().unwrap()),
-            TokenKind::ByteStr => match self.as_str() {
-                Some(s) => write!(f, "{}", s),
-                None => write!(f, "`Bytes:{:?}`", self.data()),
+            TokenKind::ByteStr => match as_str(self) {
+                Some(s) => write!(f, "\"{}\"", s),
+                None => write!(f, "`Bytes:{:?}`", self.as_raw_bytes()),
             },
             TokenKind::List => f
                 .debug_list()
@@ -41,7 +57,7 @@ impl<'a> Node<'a> {
     ///
     ///     let bytes = b"11:Hello World";
     ///     let node = Node::parse(bytes).unwrap();
-    ///     assert_eq!("Hello World", node.as_str().unwrap());
+    ///     assert_eq!(b"Hello World", node.as_bytes().unwrap());
     /// ```
     pub fn parse(buf: &'a [u8]) -> crate::Result<Self> {
         Self::parse_max_tokens(buf, usize::max_value())
@@ -60,7 +76,7 @@ impl<'a> Node<'a> {
     ///     let values: &[&[u8]] = &[b"5:Hello", b"5:World"];
     ///     for bytes in values {
     ///         let node = Node::parse_in(bytes, &mut v).unwrap();
-    ///         assert!(node.is_str());
+    ///         assert!(node.is_bytes());
     ///     }
     /// ```
     pub fn parse_in(buf: &'a [u8], tokens: &'a mut Vec<Token>) -> crate::Result<Self> {
@@ -84,7 +100,7 @@ impl<'a> Node<'a> {
     ///
     ///     let bytes = b"5:Hello World";
     ///     let (node, i) = Node::parse_prefix(bytes).unwrap();
-    ///     assert_eq!("Hello", node.as_str().unwrap());
+    ///     assert_eq!(b"Hello", node.as_bytes().unwrap());
     ///     assert_eq!(b" World", &bytes[i..]);
     /// ```
     pub fn parse_prefix(buf: &'a [u8]) -> crate::Result<(Self, usize)> {
@@ -112,7 +128,7 @@ impl<'a> Node<'a> {
     ///     let values: &[&[u8]] = &[b"5:Hello World", b"1:ade"];
     ///     for bytes in values {
     ///         let (node, i) = Node::parse_prefix_in(bytes, &mut v).unwrap();
-    ///         assert!(node.is_str());
+    ///         assert!(node.is_bytes());
     ///     }
     /// ```
     pub fn parse_prefix_in(
@@ -165,9 +181,9 @@ impl<'a> Node<'a> {
     ///
     ///     let bytes = b"l1:a2:bce";
     ///     let node = Node::parse(bytes).unwrap();
-    ///     assert_eq!(b"l1:a2:bce", node.data());
+    ///     assert_eq!(b"l1:a2:bce", node.as_raw_bytes());
     /// ```
-    pub fn data(&self) -> &'a [u8] {
+    pub fn as_raw_bytes(&self) -> &'a [u8] {
         &self.buf[self.tokens[self.idx].range()]
     }
 
@@ -186,7 +202,7 @@ impl<'a> Node<'a> {
     }
 
     /// Returns true if this node is a string.
-    pub fn is_str(&self) -> bool {
+    pub fn is_bytes(&self) -> bool {
         self.kind() == TokenKind::ByteStr
     }
 
@@ -207,8 +223,8 @@ impl<'a> Node<'a> {
     ///     let bytes = b"l1:a2:bce";
     ///     let node = Node::parse(bytes).unwrap();
     ///     let list = node.as_list().unwrap();
-    ///     assert_eq!("a", list.get_str(0).unwrap());
-    ///     assert_eq!("bc", list.get_str(1).unwrap());
+    ///     assert_eq!(b"a", list.get_bytes(0).unwrap());
+    ///     assert_eq!(b"bc", list.get_bytes(1).unwrap());
     /// ```
     pub fn as_list(&self) -> Option<List<'_>> {
         if self.is_list() {
@@ -234,7 +250,7 @@ impl<'a> Node<'a> {
     ///     let bytes = b"d1:a2:bce";
     ///     let node = Node::parse(bytes).unwrap();
     ///     let dict = node.as_dict().unwrap();
-    ///     assert_eq!("bc", dict.get_str(b"a").unwrap());
+    ///     assert_eq!(b"bc", dict.get_bytes(b"a").unwrap());
     /// ```
     pub fn as_dict(&self) -> Option<Dict<'_>> {
         if self.is_dict() {
@@ -291,15 +307,15 @@ impl<'a> Node<'a> {
     ///
     ///     let bytes = b"3:abc";
     ///     let node = Node::parse(bytes).unwrap();
-    ///     assert_eq!("abc", node.as_str().unwrap());
+    ///     assert_eq!(b"abc", node.as_bytes().unwrap());
     /// ```
-    pub fn as_str(&self) -> Option<&'a str> {
+    pub fn as_bytes(&self) -> Option<&'a [u8]> {
         let token = &self.tokens[self.idx];
         if let TokenKind::ByteStr = token.kind {
             let bytes = &self.buf[token.range()];
-            std::str::from_utf8(bytes).ok()
+            Some(bytes)
         } else {
-            return None;
+            None
         }
     }
 }
@@ -351,8 +367,8 @@ impl<'a> List<'a> {
     }
 
     /// Returns the `str` at the given index.
-    pub fn get_str(&self, i: usize) -> Option<&'a str> {
-        self.get(i)?.as_str()
+    pub fn get_bytes(&self, i: usize) -> Option<&'a [u8]> {
+        self.get(i)?.as_bytes()
     }
 
     /// Returns the `i64` at the given index.
@@ -426,7 +442,9 @@ impl<'a> Dict<'a> {
 
     /// Returns the `Node` for the given key.
     pub fn get(&self, key: &[u8]) -> Option<Node<'a>> {
-        self.iter().find(|(k, _)| k.data() == key).map(|(_, v)| v)
+        self.iter()
+            .find(|(k, _)| k.as_raw_bytes() == key)
+            .map(|(_, v)| v)
     }
 
     /// Returns the `Dict` for the given key.
@@ -448,8 +466,8 @@ impl<'a> Dict<'a> {
     }
 
     /// Returns the `str` for the given key.
-    pub fn get_str(&self, key: &[u8]) -> Option<&'a str> {
-        self.get(key)?.as_str()
+    pub fn get_bytes(&self, key: &[u8]) -> Option<&'a [u8]> {
+        self.get(key)?.as_bytes()
     }
 
     /// Returns the `i64` for the given key.
@@ -512,7 +530,7 @@ mod tests {
         let node = Node::parse(s).unwrap();
         let list = node.as_list().unwrap();
         let n = list.get(1).unwrap();
-        assert_eq!(b"b", n.data());
+        assert_eq!(b"b", n.as_raw_bytes());
     }
 
     #[test]
@@ -520,9 +538,9 @@ mod tests {
         let s = b"l1:ad1:al1:aee1:be";
         let node = Node::parse(s).unwrap();
         let node = node.as_list().unwrap();
-        assert_eq!(b"a", node.get(0).unwrap().data());
-        assert_eq!(b"d1:al1:aee", node.get(1).unwrap().data());
-        assert_eq!(b"b", node.get(2).unwrap().data());
+        assert_eq!(b"a", node.get(0).unwrap().as_raw_bytes());
+        assert_eq!(b"d1:al1:aee", node.get(1).unwrap().as_raw_bytes());
+        assert_eq!(b"b", node.get(2).unwrap().as_raw_bytes());
         assert_eq!(None, node.get(3));
     }
 
@@ -532,9 +550,9 @@ mod tests {
         let node = Node::parse(s).unwrap();
         let node = node.as_list().unwrap();
         let node = node.get_list(1).unwrap();
-        assert_eq!(b"a", node.get(0).unwrap().data());
-        assert_eq!(b"d1:al1:aee", node.get(1).unwrap().data());
-        assert_eq!(b"b", node.get(2).unwrap().data());
+        assert_eq!(b"a", node.get(0).unwrap().as_raw_bytes());
+        assert_eq!(b"d1:al1:aee", node.get(1).unwrap().as_raw_bytes());
+        assert_eq!(b"b", node.get(2).unwrap().as_raw_bytes());
         assert_eq!(None, node.get(3));
     }
 
@@ -543,9 +561,9 @@ mod tests {
         let s = b"l1:ad1:al1:aee1:be";
         let node = Node::parse(s).unwrap();
         let mut iter = node.as_list().unwrap().iter();
-        assert_eq!(b"a", iter.next().unwrap().data());
-        assert_eq!(b"d1:al1:aee", iter.next().unwrap().data());
-        assert_eq!(b"b", iter.next().unwrap().data());
+        assert_eq!(b"a", iter.next().unwrap().as_raw_bytes());
+        assert_eq!(b"d1:al1:aee", iter.next().unwrap().as_raw_bytes());
+        assert_eq!(b"b", iter.next().unwrap().as_raw_bytes());
         assert_eq!(None, iter.next());
     }
 
@@ -564,12 +582,12 @@ mod tests {
         let mut iter = node.as_dict().unwrap().iter();
 
         let (k, v) = iter.next().unwrap();
-        assert_eq!(b"a", k.data());
-        assert_eq!(b"bc", v.data());
+        assert_eq!(b"a", k.as_raw_bytes());
+        assert_eq!(b"bc", v.as_raw_bytes());
 
         let (k, v) = iter.next().unwrap();
-        assert_eq!(b"def", k.data());
-        assert_eq!(b"ghij", v.data());
+        assert_eq!(b"def", k.as_raw_bytes());
+        assert_eq!(b"ghij", v.as_raw_bytes());
 
         assert_eq!(None, iter.next());
     }
@@ -581,8 +599,8 @@ mod tests {
         let mut iter = node.as_dict().unwrap().iter();
 
         let (k, v) = iter.next().unwrap();
-        assert_eq!(b"a", k.data());
-        assert_eq!(b"le", v.data());
+        assert_eq!(b"a", k.as_raw_bytes());
+        assert_eq!(b"le", v.as_raw_bytes());
 
         assert_eq!(None, iter.next());
     }
@@ -594,15 +612,15 @@ mod tests {
         let mut list_iter = node.as_list().unwrap().iter();
 
         let dict = list_iter.next().unwrap();
-        assert_eq!(b"a", list_iter.next().unwrap().data());
-        assert_eq!(b"a", list_iter.next().unwrap().data());
+        assert_eq!(b"a", list_iter.next().unwrap().as_raw_bytes());
+        assert_eq!(b"a", list_iter.next().unwrap().as_raw_bytes());
         assert_eq!(None, list_iter.next());
 
         let mut iter = dict.as_dict().unwrap().iter();
 
         let (k, v) = iter.next().unwrap();
-        assert_eq!(b"a", k.data());
-        assert_eq!(b"le", v.data());
+        assert_eq!(b"a", k.as_raw_bytes());
+        assert_eq!(b"le", v.as_raw_bytes());
 
         assert_eq!(None, iter.next());
     }
@@ -632,7 +650,7 @@ mod tests {
     fn str_value() {
         let s = b"5:abcde";
         let node = Node::parse(s).unwrap();
-        assert_eq!("abcde", node.as_str().unwrap());
+        assert_eq!(b"abcde", node.as_bytes().unwrap());
     }
 
     #[test]
@@ -666,5 +684,19 @@ mod tests {
     fn decode_empty() {
         let err = Node::parse(&[]).unwrap_err();
         assert_eq!(err, Error::Eof);
+    }
+
+    #[test]
+    fn decode_debug_bytes() {
+        let s = "3:\x01\x01\x01".as_bytes();
+        let n = Node::parse(s).unwrap();
+        assert_eq!("`Bytes:[1, 1, 1]`", format!("{:?}", n));
+    }
+
+    #[test]
+    fn decode_debug_str() {
+        let s = "3:abc".as_bytes();
+        let n = Node::parse(s).unwrap();
+        assert_eq!("\"abc\"", format!("{:?}", n));
     }
 }
