@@ -112,12 +112,14 @@ impl Parser {
         Self::default()
     }
 
-    pub fn set_token_limit(&mut self, token_limit: usize) {
-        self.token_limit = token_limit;
+    pub fn with_token_limit(token_limit: usize) -> Self {
+        Self {
+            token_limit,
+            ..Self::default()
+        }
     }
 
-    /// Run Bencode parser. It parses a bencoded data string and returns a vector of tokens, each
-    /// describing a single Bencode object.
+    /// It parses a bencoded bytes and returns a `Node` object
     pub fn parse<'a>(&'a mut self, buf: &'a [u8]) -> Result<Node<'a>, Error> {
         let (node, len) = self.parse_prefix(buf)?;
         if len == buf.len() {
@@ -130,8 +132,10 @@ impl Parser {
         }
     }
 
-    /// Run Bencode parser. It parses a bencoded data string into given vector of tokens, each
-    /// describing a single Bencode object.
+    /// It parses one object from the beginning of given bytes and return the parsed `Node` and
+    /// number of bytes processed.
+    ///
+    /// It's useful when there is trailing data after the bencoded bytes.
     pub fn parse_prefix<'a>(&'a mut self, buf: &'a [u8]) -> Result<(Node<'a>, usize), Error> {
         if buf.is_empty() {
             return Err(Error::Eof);
@@ -544,8 +548,7 @@ mod tests {
     #[test]
     fn token_limit() {
         let s = b"l1:a2:ab3:abc4:abcde";
-        let mut parser = Parser::new();
-        parser.set_token_limit(3);
+        let mut parser = Parser::with_token_limit(3);
         let err = parser.parse(s).unwrap_err();
         assert_eq!(Error::NoMemory, err);
     }
