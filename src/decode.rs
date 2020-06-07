@@ -10,27 +10,11 @@ pub struct Node<'a> {
     idx: usize,
 }
 
-fn as_str<'a>(node: &Node<'a>) -> Option<&'a str> {
-    let token = &node.tokens[node.idx];
-    if let TokenKind::ByteStr = token.kind {
-        let bytes = &node.buf[token.range()];
-        if let Ok(s) = std::str::from_utf8(bytes) {
-            if s.chars().all(|c| {
-                c.is_ascii_alphanumeric() || c.is_ascii_punctuation() || c.is_ascii_whitespace()
-            }) {
-                return Some(s);
-            }
-        }
-    }
-
-    return None;
-}
-
 impl fmt::Debug for Node<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind() {
             TokenKind::Int => write!(f, "{}", self.as_int().unwrap()),
-            TokenKind::ByteStr => match as_str(self) {
+            TokenKind::ByteStr => match self.as_ascii_str() {
                 Some(s) => write!(f, "\"{}\"", s),
                 None => write!(f, "`Bytes:{:?}`", self.as_raw_bytes()),
             },
@@ -297,7 +281,7 @@ impl<'a> Node<'a> {
         Some(val)
     }
 
-    /// Return this node as a `i64`.
+    /// Return this node as a byte slice.
     ///
     /// # Examples
     ///
@@ -314,6 +298,54 @@ impl<'a> Node<'a> {
         if let TokenKind::ByteStr = token.kind {
             let bytes = &self.buf[token.range()];
             Some(bytes)
+        } else {
+            None
+        }
+    }
+
+    /// Return this node as a string slice.
+    ///
+    /// Returns None if this node is not a valid UTF-8 byte string
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let bytes = b"3:abc";
+    ///     let node = Node::parse(bytes).unwrap();
+    ///     assert_eq!("abc", node.as_str().unwrap());
+    /// ```
+    pub fn as_str(&self) -> Option<&'a str> {
+        let bytes = self.as_bytes()?;
+        std::str::from_utf8(bytes).ok()
+    }
+
+    /// Return this node as a string slice.
+    ///
+    /// Returns None if this node
+    /// 1. is not a valid UTF-8 string.
+    /// 2. contains characters except ASCII alphanumeric, punctuation and whitespace.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    /// ```
+    ///     use ben::Node;
+    ///
+    ///     let node = Node::parse(b"3:abc").unwrap();
+    ///     assert_eq!("abc", node.as_ascii_str().unwrap());
+    ///
+    ///     let node = Node::parse(b"3:\x01\x01\x01").unwrap();
+    ///     assert!(node.as_ascii_str().is_none());
+    /// ```
+    pub fn as_ascii_str(&self) -> Option<&'a str> {
+        let s = self.as_str()?;
+        if s.chars().all(|c| {
+            c.is_ascii_alphanumeric() || c.is_ascii_punctuation() || c.is_ascii_whitespace()
+        }) {
+            Some(s)
         } else {
             None
         }
@@ -366,9 +398,19 @@ impl<'a> List<'a> {
         })
     }
 
-    /// Returns the `str` at the given index.
+    /// Returns the byte slice at the given index.
     pub fn get_bytes(&self, i: usize) -> Option<&'a [u8]> {
         self.get(i)?.as_bytes()
+    }
+
+    /// Returns the string slice at the given index.
+    pub fn get_str(&self, i: usize) -> Option<&'a str> {
+        self.get(i)?.as_str()
+    }
+
+    /// Returns the printable ASCII string slice at the given index.
+    pub fn get_ascii_str(&self, i: usize) -> Option<&'a str> {
+        self.get(i)?.as_ascii_str()
     }
 
     /// Returns the `i64` at the given index.
@@ -465,9 +507,19 @@ impl<'a> Dict<'a> {
         })
     }
 
-    /// Returns the `str` for the given key.
+    /// Returns the byte slice for the given key.
     pub fn get_bytes(&self, key: &[u8]) -> Option<&'a [u8]> {
         self.get(key)?.as_bytes()
+    }
+
+    /// Returns the string slice for the given key.
+    pub fn get_str(&self, key: &[u8]) -> Option<&'a str> {
+        self.get(key)?.as_str()
+    }
+
+    /// Returns the printable ASCII string slice for the given key.
+    pub fn get_ascii_str(&self, key: &[u8]) -> Option<&'a str> {
+        self.get(key)?.as_ascii_str()
     }
 
     /// Returns the `i64` for the given key.
@@ -690,6 +742,8 @@ mod tests {
     fn decode_debug_bytes() {
         let s = "3:\x01\x01\x01".as_bytes();
         let n = Node::parse(s).unwrap();
+        assert!(n.as_bytes().is_some());
+        assert!(n.as_ascii_str().is_none());
         assert_eq!("`Bytes:[1, 1, 1]`", format!("{:?}", n));
     }
 
@@ -697,6 +751,8 @@ mod tests {
     fn decode_debug_str() {
         let s = "3:abc".as_bytes();
         let n = Node::parse(s).unwrap();
+        assert!(n.as_bytes().is_some());
+        assert!(n.as_ascii_str().is_some());
         assert_eq!("\"abc\"", format!("{:?}", n));
     }
 }
