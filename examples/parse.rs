@@ -1,7 +1,8 @@
-use ben::Node;
+use ben::Parser;
 
 fn main() {
     let s = b"d1:a1:b1:ci1e1:x1:y1:dde1:fle1:g1:he";
-    let node = Node::parse(s).unwrap();
+    let mut parser = Parser::new();
+    let node = parser.parse(s).unwrap();
     println!("{:#?}", node);
 }

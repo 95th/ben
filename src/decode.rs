@@ -1,13 +1,12 @@
+use crate::parse::Token;
 use crate::parse::TokenKind;
-use crate::parse::{Parser, Token};
-use std::borrow::Cow;
 use std::fmt;
 
 #[derive(PartialEq)]
 pub struct Node<'a> {
-    buf: &'a [u8],
-    tokens: Cow<'a, [Token]>,
-    idx: usize,
+    pub(crate) buf: &'a [u8],
+    pub(crate) tokens: &'a [Token],
+    pub(crate) idx: usize,
 }
 
 impl fmt::Debug for Node<'_> {
@@ -31,127 +30,6 @@ impl fmt::Debug for Node<'_> {
 }
 
 impl<'a> Node<'a> {
-    /// Parse given bencoded bytes.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    /// ```
-    ///     use ben::Node;
-    ///
-    ///     let bytes = b"11:Hello World";
-    ///     let node = Node::parse(bytes).unwrap();
-    ///     assert_eq!(b"Hello World", node.as_bytes().unwrap());
-    /// ```
-    pub fn parse(buf: &'a [u8]) -> crate::Result<Self> {
-        Self::parse_max_tokens(buf, usize::max_value())
-    }
-
-    /// Parse given bencoded bytes using a given token buffer.
-    /// It helps you reuse the buffer next time.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    /// ```
-    ///     use ben::Node;
-    ///
-    ///     let mut v = vec![];
-    ///     let values: &[&[u8]] = &[b"5:Hello", b"5:World"];
-    ///     for bytes in values {
-    ///         let node = Node::parse_in(bytes, &mut v).unwrap();
-    ///         assert!(node.is_bytes());
-    ///     }
-    /// ```
-    pub fn parse_in(buf: &'a [u8], tokens: &'a mut Vec<Token>) -> crate::Result<Self> {
-        let parser = Parser::new();
-        parser.parse_in(buf, tokens)?;
-        Ok(Self {
-            buf,
-            tokens: Cow::Borrowed(tokens),
-            idx: 0,
-        })
-    }
-
-    /// Parse given bencoded bytes from the beginning and returns
-    /// index where one root object is parsed successfully.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    /// ```
-    ///     use ben::Node;
-    ///
-    ///     let bytes = b"5:Hello World";
-    ///     let (node, i) = Node::parse_prefix(bytes).unwrap();
-    ///     assert_eq!(b"Hello", node.as_bytes().unwrap());
-    ///     assert_eq!(b" World", &bytes[i..]);
-    /// ```
-    pub fn parse_prefix(buf: &'a [u8]) -> crate::Result<(Self, usize)> {
-        let parser = Parser::new();
-        let (tokens, len) = parser.parse_prefix(buf)?;
-        let node = Self {
-            buf,
-            tokens: Cow::Owned(tokens),
-            idx: 0,
-        };
-        Ok((node, len))
-    }
-
-    /// Parse given bencoded bytes from the beginning and returns
-    /// index where one root object is parsed successfully. It accepts
-    /// a token buffer argument which helps reuse the buffer next time.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    /// ```
-    ///     use ben::Node;
-    ///
-    ///     let mut v = vec![];
-    ///     let values: &[&[u8]] = &[b"5:Hello World", b"1:ade"];
-    ///     for bytes in values {
-    ///         let (node, i) = Node::parse_prefix_in(bytes, &mut v).unwrap();
-    ///         assert!(node.is_bytes());
-    ///     }
-    /// ```
-    pub fn parse_prefix_in(
-        buf: &'a [u8],
-        tokens: &'a mut Vec<Token>,
-    ) -> crate::Result<(Self, usize)> {
-        let parser = Parser::new();
-        let len = parser.parse_prefix_in(buf, tokens)?;
-        let node = Self {
-            buf,
-            tokens: Cow::Borrowed(tokens),
-            idx: 0,
-        };
-        Ok((node, len))
-    }
-
-    /// Parse given bencoded bytes with limit on maximum number of
-    /// tokens that can be parsed.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    /// ```
-    ///     use ben::{Node, Error};
-    ///
-    ///     let bytes = b"l1:a2:bce";
-    ///     let err = Node::parse_max_tokens(bytes, 2).unwrap_err();
-    ///     assert_eq!(Error::NoMemory, err);
-    /// ```
-    pub fn parse_max_tokens(buf: &'a [u8], max_tokens: usize) -> crate::Result<Self> {
-        let mut parser = Parser::new();
-        parser.set_token_limit(max_tokens);
-        Ok(Self {
-            buf,
-            tokens: Cow::Owned(parser.parse(buf)?),
-            idx: 0,
-        })
-    }
-
     /// Returns raw bytes of this node.
     ///
     /// This returns complete raw bytes for dict and list, but remove the headers
@@ -161,10 +39,11 @@ impl<'a> Node<'a> {
     ///
     /// Basic usage:
     /// ```
-    ///     use ben::Node;
+    ///     use ben::{Node, Parser};
     ///
     ///     let bytes = b"l1:a2:bce";
-    ///     let node = Node::parse(bytes).unwrap();
+    ///    let parser = &mut Parser::new();
+    ///    let node = parser.parse(bytes).unwrap();
     ///     assert_eq!(b"l1:a2:bce", node.as_raw_bytes());
     /// ```
     pub fn as_raw_bytes(&self) -> &'a [u8] {
@@ -202,19 +81,20 @@ impl<'a> Node<'a> {
     ///
     /// Basic usage:
     /// ```
-    ///     use ben::Node;
+    /// use ben::{Node, Parser};
     ///
-    ///     let bytes = b"l1:a2:bce";
-    ///     let node = Node::parse(bytes).unwrap();
-    ///     let list = node.as_list().unwrap();
-    ///     assert_eq!(b"a", list.get_bytes(0).unwrap());
-    ///     assert_eq!(b"bc", list.get_bytes(1).unwrap());
+    /// let bytes = b"l1:a2:bce";
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(bytes).unwrap();
+    /// let list = node.as_list().unwrap();
+    /// assert_eq!(b"a", list.get_bytes(0).unwrap());
+    /// assert_eq!(b"bc", list.get_bytes(1).unwrap());
     /// ```
-    pub fn as_list(&self) -> Option<List<'_>> {
+    pub fn as_list(&self) -> Option<List<'a>> {
         if self.is_list() {
             Some(List {
                 buf: self.buf,
-                tokens: &self.tokens,
+                tokens: self.tokens,
                 idx: self.idx,
             })
         } else {
@@ -229,14 +109,15 @@ impl<'a> Node<'a> {
     ///
     /// Basic usage:
     /// ```
-    ///     use ben::Node;
+    /// use ben::{Node, Parser};
     ///
-    ///     let bytes = b"d1:a2:bce";
-    ///     let node = Node::parse(bytes).unwrap();
-    ///     let dict = node.as_dict().unwrap();
-    ///     assert_eq!(b"bc", dict.get_bytes(b"a").unwrap());
+    /// let bytes = b"d1:a2:bce";
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(bytes).unwrap();
+    /// let dict = node.as_dict().unwrap();
+    /// assert_eq!(b"bc", dict.get_bytes(b"a").unwrap());
     /// ```
-    pub fn as_dict(&self) -> Option<Dict<'_>> {
+    pub fn as_dict(&self) -> Option<Dict<'a>> {
         if self.is_dict() {
             Some(Dict {
                 buf: self.buf,
@@ -254,11 +135,12 @@ impl<'a> Node<'a> {
     ///
     /// Basic usage:
     /// ```
-    ///     use ben::Node;
+    /// use ben::{Node, Parser};
     ///
-    ///     let bytes = b"i123e";
-    ///     let node = Node::parse(bytes).unwrap();
-    ///     assert_eq!(123, node.as_int().unwrap());
+    /// let bytes = b"i123e";
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(bytes).unwrap();
+    /// assert_eq!(123, node.as_int().unwrap());
     /// ```
     pub fn as_int(&self) -> Option<i64> {
         let token = &self.tokens[self.idx];
@@ -287,11 +169,12 @@ impl<'a> Node<'a> {
     ///
     /// Basic usage:
     /// ```
-    ///     use ben::Node;
+    /// use ben::{Node, Parser};
     ///
-    ///     let bytes = b"3:abc";
-    ///     let node = Node::parse(bytes).unwrap();
-    ///     assert_eq!(b"abc", node.as_bytes().unwrap());
+    /// let bytes = b"3:abc";
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(bytes).unwrap();
+    /// assert_eq!(b"abc", node.as_bytes().unwrap());
     /// ```
     pub fn as_bytes(&self) -> Option<&'a [u8]> {
         let token = &self.tokens[self.idx];
@@ -311,11 +194,12 @@ impl<'a> Node<'a> {
     ///
     /// Basic usage:
     /// ```
-    ///     use ben::Node;
+    /// use ben::{Node, Parser};
     ///
-    ///     let bytes = b"3:abc";
-    ///     let node = Node::parse(bytes).unwrap();
-    ///     assert_eq!("abc", node.as_str().unwrap());
+    /// let bytes = b"3:abc";
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(bytes).unwrap();
+    /// assert_eq!("abc", node.as_str().unwrap());
     /// ```
     pub fn as_str(&self) -> Option<&'a str> {
         let bytes = self.as_bytes()?;
@@ -332,13 +216,14 @@ impl<'a> Node<'a> {
     ///
     /// Basic usage:
     /// ```
-    ///     use ben::Node;
+    /// use ben::{Node, Parser};
     ///
-    ///     let node = Node::parse(b"3:abc").unwrap();
-    ///     assert_eq!("abc", node.as_ascii_str().unwrap());
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(b"3:abc").unwrap();
+    /// assert_eq!("abc", node.as_ascii_str().unwrap());
     ///
-    ///     let node = Node::parse(b"3:\x01\x01\x01").unwrap();
-    ///     assert!(node.as_ascii_str().is_none());
+    /// let node = parser.parse(b"3:\x01\x01\x01").unwrap();
+    /// assert!(node.as_ascii_str().is_none());
     /// ```
     pub fn as_ascii_str(&self) -> Option<&'a str> {
         let s = self.as_str()?;
@@ -376,26 +261,18 @@ impl<'a> List<'a> {
         Some(Node {
             buf: self.buf,
             idx: self.find_idx(i)?,
-            tokens: Cow::Borrowed(self.tokens),
+            tokens: self.tokens,
         })
     }
 
     /// Returns the `Dict` at the given index.
     pub fn get_dict(&self, i: usize) -> Option<Dict<'a>> {
-        Some(Dict {
-            buf: self.buf,
-            idx: self.get(i)?.as_dict()?.idx,
-            tokens: self.tokens,
-        })
+        self.get(i)?.as_dict()
     }
 
     /// Returns the `List` at the given index.
     pub fn get_list(&self, i: usize) -> Option<List<'a>> {
-        Some(List {
-            buf: self.buf,
-            idx: self.get(i)?.as_list()?.idx,
-            tokens: self.tokens,
-        })
+        self.get(i)?.as_list()
     }
 
     /// Returns the byte slice at the given index.
@@ -458,7 +335,7 @@ impl<'a> Iterator for ListIter<'a> {
         Some(Node {
             buf: self.buf,
             idx,
-            tokens: Cow::Borrowed(self.tokens),
+            tokens: self.tokens,
         })
     }
 }
@@ -560,12 +437,12 @@ impl<'a> Iterator for DictIter<'a> {
             Node {
                 idx: key_idx,
                 buf: self.buf,
-                tokens: Cow::Borrowed(self.tokens),
+                tokens: self.tokens,
             },
             Node {
                 idx: val_idx,
                 buf: self.buf,
-                tokens: Cow::Borrowed(self.tokens),
+                tokens: self.tokens,
             },
         ))
     }
@@ -573,13 +450,13 @@ impl<'a> Iterator for DictIter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::parse::*;
 
     #[test]
     fn list_get() {
         let s = b"ld1:alee1:be";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let list = node.as_list().unwrap();
         let n = list.get(1).unwrap();
         assert_eq!(b"b", n.as_raw_bytes());
@@ -588,7 +465,8 @@ mod tests {
     #[test]
     fn list_get_nested() {
         let s = b"l1:ad1:al1:aee1:be";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let node = node.as_list().unwrap();
         assert_eq!(b"a", node.get(0).unwrap().as_raw_bytes());
         assert_eq!(b"d1:al1:aee", node.get(1).unwrap().as_raw_bytes());
@@ -599,7 +477,8 @@ mod tests {
     #[test]
     fn list_get_overflow() {
         let s = b"l1:al1:ad1:al1:aee1:be1:be";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let node = node.as_list().unwrap();
         let node = node.get_list(1).unwrap();
         assert_eq!(b"a", node.get(0).unwrap().as_raw_bytes());
@@ -611,7 +490,8 @@ mod tests {
     #[test]
     fn list_iter() {
         let s = b"l1:ad1:al1:aee1:be";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let mut iter = node.as_list().unwrap().iter();
         assert_eq!(b"a", iter.next().unwrap().as_raw_bytes());
         assert_eq!(b"d1:al1:aee", iter.next().unwrap().as_raw_bytes());
@@ -622,7 +502,8 @@ mod tests {
     #[test]
     fn list_iter_not_a_list() {
         let s = b"de";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let node = node.as_list();
         assert!(node.is_none());
     }
@@ -630,7 +511,8 @@ mod tests {
     #[test]
     fn dict_iter() {
         let s = b"d1:a2:bc3:def4:ghije";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let mut iter = node.as_dict().unwrap().iter();
 
         let (k, v) = iter.next().unwrap();
@@ -647,7 +529,8 @@ mod tests {
     #[test]
     fn dict_iter_2() {
         let s = b"d1:alee";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let mut iter = node.as_dict().unwrap().iter();
 
         let (k, v) = iter.next().unwrap();
@@ -660,7 +543,8 @@ mod tests {
     #[test]
     fn dict_iter_inside_list() {
         let s = b"ld1:alee1:a1:ae";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let mut list_iter = node.as_list().unwrap().iter();
 
         let dict = list_iter.next().unwrap();
@@ -680,14 +564,16 @@ mod tests {
     #[test]
     fn int_value() {
         let s = b"i12e";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         assert_eq!(12, node.as_int().unwrap());
     }
 
     #[test]
     fn int_value_negative() {
         let s = b"i-12e";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         assert_eq!(-12, node.as_int().unwrap());
     }
 
@@ -701,14 +587,16 @@ mod tests {
     #[test]
     fn str_value() {
         let s = b"5:abcde";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         assert_eq!(b"abcde", node.as_bytes().unwrap());
     }
 
     #[test]
     fn dict_get() {
         let s = b"d1:ai1e1:bi2ee";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let dict = node.as_dict().unwrap();
         let b = dict.get(b"b").unwrap();
         assert_eq!(2, b.as_int().unwrap());
@@ -717,7 +605,8 @@ mod tests {
     #[test]
     fn dict_get_invalid() {
         let s = b"d1:ai1e1:bi2ee";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let dict = node.as_dict().unwrap();
         assert!(dict.get_dict(b"b").is_none());
         assert!(dict.get_list(b"b").is_none());
@@ -726,7 +615,8 @@ mod tests {
     #[test]
     fn list_get_invalid() {
         let s = b"l1:a1:be";
-        let node = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
         let dict = node.as_list().unwrap();
         assert!(dict.get_dict(0).is_none());
         assert!(dict.get_list(1).is_none());
@@ -734,14 +624,16 @@ mod tests {
 
     #[test]
     fn decode_empty() {
-        let err = Node::parse(&[]).unwrap_err();
+        let parser = &mut Parser::new();
+        let err = parser.parse(&[]).unwrap_err();
         assert_eq!(err, Error::Eof);
     }
 
     #[test]
     fn decode_debug_bytes() {
         let s = "3:\x01\x01\x01".as_bytes();
-        let n = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let n = parser.parse(s).unwrap();
         assert!(n.as_bytes().is_some());
         assert!(n.as_ascii_str().is_none());
         assert_eq!("`Bytes:[1, 1, 1]`", format!("{:?}", n));
@@ -750,7 +642,8 @@ mod tests {
     #[test]
     fn decode_debug_str() {
         let s = "3:abc".as_bytes();
-        let n = Node::parse(s).unwrap();
+        let parser = &mut Parser::new();
+        let n = parser.parse(s).unwrap();
         assert!(n.as_bytes().is_some());
         assert!(n.as_ascii_str().is_some());
         assert_eq!("\"abc\"", format!("{:?}", n));

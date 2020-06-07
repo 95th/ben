@@ -1,5 +1,4 @@
-use ben::Encoder;
-use ben::Node;
+use ben::{Encoder, Parser};
 
 fn main() {
     let mut v = vec![];
@@ -15,6 +14,7 @@ fn main() {
     list.add(1);
     list.finish();
 
-    let n = Node::parse(&v).unwrap();
+    let mut parser = Parser::new();
+    let n = parser.parse(&v).unwrap();
     println!("{:#?}", n);
 }
