@@ -39,6 +39,16 @@ impl<T: Encode> Encode for Vec<T> {
     }
 }
 
+impl<T: Encode> Encode for [T] {
+    fn encode<E: Encoder>(&self, enc: &mut E) {
+        let mut list = enc.add_list();
+        for t in self {
+            list.add(t);
+        }
+        list.finish();
+    }
+}
+
 impl Encode for &[u8] {
     fn encode<E: Encoder>(&self, enc: &mut E) {
         enc.add_bytes(self);
@@ -46,6 +56,12 @@ impl Encode for &[u8] {
 }
 
 impl Encode for &str {
+    fn encode<E: Encoder>(&self, enc: &mut E) {
+        enc.add_str(self);
+    }
+}
+
+impl Encode for String {
     fn encode<E: Encoder>(&self, enc: &mut E) {
         enc.add_str(self);
     }
