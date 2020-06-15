@@ -17,14 +17,8 @@ impl fmt::Debug for Node<'_> {
                 Some(s) => write!(f, "\"{}\"", s),
                 None => write!(f, "`Bytes:{:?}`", self.as_raw_bytes()),
             },
-            TokenKind::List => f
-                .debug_list()
-                .entries(self.as_list().unwrap().iter())
-                .finish(),
-            TokenKind::Dict => f
-                .debug_map()
-                .entries(self.as_dict().unwrap().iter())
-                .finish(),
+            TokenKind::List => self.as_list().unwrap().fmt(f),
+            TokenKind::Dict => self.as_dict().unwrap().fmt(f),
         }
     }
 }
@@ -244,6 +238,12 @@ pub struct List<'a> {
     idx: usize,
 }
 
+impl fmt::Debug for List<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
 impl<'a> List<'a> {
     /// Gets an iterator over the entries of the list
     pub fn iter(&self) -> ListIter<'a> {
@@ -345,6 +345,12 @@ pub struct Dict<'a> {
     buf: &'a [u8],
     tokens: &'a [Token],
     idx: usize,
+}
+
+impl fmt::Debug for Dict<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map().entries(self.iter()).finish()
+    }
 }
 
 impl<'a> Dict<'a> {
