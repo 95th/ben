@@ -1,5 +1,4 @@
-use crate::parse::Token;
-use crate::parse::TokenKind;
+use crate::token::{Token, TokenKind};
 use std::fmt;
 
 #[derive(PartialEq)]
@@ -457,6 +456,7 @@ impl<'a> Iterator for DictIter<'a> {
 #[cfg(test)]
 mod tests {
     use crate::parse::*;
+    use crate::Error;
 
     #[test]
     fn list_get() {

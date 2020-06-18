@@ -1,90 +1,6 @@
-use crate::Node;
-use std::fmt;
-use std::ops::Range;
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum TokenKind {
-    Dict,
-    List,
-    ByteStr,
-    Int,
-}
-
-#[derive(Clone, PartialEq)]
-pub struct Token {
-    pub(crate) kind: TokenKind,
-    pub(crate) start: i32,
-    pub(crate) end: i32,
-    pub(crate) children: u32,
-    pub(crate) next: u32,
-}
-
-impl fmt::Debug for Token {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}[{}:{}]", self.kind, self.start, self.end)
-    }
-}
-
-impl Token {
-    pub(crate) fn new(kind: TokenKind, start: i32, end: i32) -> Self {
-        Self::with_size(kind, start, end, 0, 1)
-    }
-
-    pub(crate) fn with_size(
-        kind: TokenKind,
-        start: i32,
-        end: i32,
-        children: u32,
-        next: u32,
-    ) -> Self {
-        Self {
-            kind,
-            start,
-            end,
-            children,
-            next,
-        }
-    }
-
-    /// Returns this token's bounds in the original buffer.
-    ///
-    /// # Panics
-    /// If the token is not valid
-    pub fn range(&self) -> Range<usize> {
-        assert!(self.start >= 0);
-        assert!(self.end >= self.start);
-
-        self.start as usize..self.end as usize
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Error {
-    /// The string is not a full Bencode packet, more bytes expected
-    Eof,
-    /// Invalid character inside Bencode string
-    Unexpected { pos: usize },
-    /// Invalid character inside Bencode string
-    Invalid { reason: &'static str, pos: usize },
-    /// Not enough tokens were provided
-    NoMemory,
-    /// Integer Overflow
-    Overflow { pos: usize },
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::Eof => write!(f, "Unexpected End of File"),
-            Self::Unexpected { pos } => write!(f, "Unexpected character at {}", pos),
-            Self::Invalid { reason, pos } => write!(f, "Invalid input at {}: {}", pos, reason),
-            Self::NoMemory => write!(f, "No tokens left to parse"),
-            Self::Overflow { pos } => write!(f, "Integer overflow at {}", pos),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
+use crate::decode::Node;
+use crate::error::Error;
+use crate::token::{Token, TokenKind};
 
 /// Bencode Parser
 pub struct Parser {
@@ -141,7 +57,7 @@ impl Parser {
             return Err(Error::Eof);
         }
 
-        self.reset();
+        self.clear();
         let mut depth = 0;
         while self.pos < buf.len() {
             let c = buf[self.pos];
@@ -243,7 +159,7 @@ impl Parser {
         Ok((node, self.pos))
     }
 
-    fn reset(&mut self) {
+    fn clear(&mut self) {
         self.tokens.clear();
         self.pos = 0;
         self.tok_next = 0;

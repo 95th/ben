@@ -4,10 +4,14 @@
 
 pub mod decode;
 pub mod encode;
+mod error;
 mod parse;
+mod token;
 
 pub use decode::Node;
 pub use encode::{Encode, Encoder};
-pub use parse::{Error, Parser, Token};
+pub use error::Error;
+pub use parse::Parser;
+pub use token::Token;
 
 pub type Result<T> = std::result::Result<T, Error>;
