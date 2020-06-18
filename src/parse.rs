@@ -67,7 +67,7 @@ impl Parser {
                     self.pos += 1;
                     let start = self.pos;
                     self.parse_int(buf, b'e')?;
-                    let token = Token::new(TokenKind::Int, start as _, self.pos as _);
+                    let token = Token::new(TokenKind::Int, start as i32, self.pos as i32);
                     if let Err(e) = self.alloc_token(token) {
                         self.pos = start;
                         return Err(e);
@@ -76,7 +76,7 @@ impl Parser {
                 }
                 b'l' => {
                     depth += 1;
-                    let token = Token::new(TokenKind::List, self.pos as _, -1);
+                    let token = Token::new(TokenKind::List, self.pos as i32, -1);
                     self.pos += 1;
                     self.alloc_token(token)?;
                     self.update_super(TokenKind::List)?;
@@ -84,7 +84,7 @@ impl Parser {
                 }
                 b'd' => {
                     depth += 1;
-                    let token = Token::new(TokenKind::Dict, self.pos as _, -1);
+                    let token = Token::new(TokenKind::Dict, self.pos as i32, -1);
                     self.pos += 1;
                     self.alloc_token(token)?;
                     self.update_super(TokenKind::Dict)?;
@@ -103,7 +103,7 @@ impl Parser {
                         if token.start >= 0 && token.end < 0 {
                             token.next = self.tok_next as u32 - i as u32;
                             self.tok_super = -1;
-                            token.end = self.pos as _;
+                            token.end = self.pos as i32;
                             break;
                         } else {
                             i -= 1
@@ -121,7 +121,7 @@ impl Parser {
                     while i >= 0 {
                         let token = &self.tokens[i as usize];
                         if token.start >= 0 && token.end < 0 {
-                            self.tok_super = i as _;
+                            self.tok_super = i as isize;
                             break;
                         } else {
                             i -= 1
@@ -259,7 +259,7 @@ impl Parser {
             return Err(Error::Eof);
         }
 
-        let token = Token::new(TokenKind::ByteStr, self.pos as _, (self.pos + len) as _);
+        let token = Token::new(TokenKind::ByteStr, self.pos as i32, (self.pos + len) as i32);
         if let Ok(_) = self.alloc_token(token) {
             self.pos += len;
             Ok(())
