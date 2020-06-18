@@ -1,5 +1,5 @@
 use crate::decode::Node;
-use crate::error::Error;
+use crate::error::{Error, Result};
 use crate::token::{Token, TokenKind};
 
 /// Bencode Parser
@@ -36,7 +36,7 @@ impl Parser {
     }
 
     /// It parses a bencoded bytes and returns a `Node` object
-    pub fn parse<'a>(&'a mut self, buf: &'a [u8]) -> Result<Node<'a>, Error> {
+    pub fn parse<'a>(&'a mut self, buf: &'a [u8]) -> Result<Node<'a>> {
         let (node, len) = self.parse_prefix(buf)?;
         if len == buf.len() {
             Ok(node)
@@ -52,7 +52,7 @@ impl Parser {
     /// number of bytes processed.
     ///
     /// It's useful when there is trailing data after the bencoded bytes.
-    pub fn parse_prefix<'a>(&'a mut self, buf: &'a [u8]) -> Result<(Node<'a>, usize), Error> {
+    pub fn parse_prefix<'a>(&'a mut self, buf: &'a [u8]) -> Result<(Node<'a>, usize)> {
         if buf.is_empty() {
             return Err(Error::Eof);
         }
@@ -163,7 +163,7 @@ impl Parser {
         self.tok_super = -1;
     }
 
-    fn update_super(&mut self, curr_kind: TokenKind) -> Result<(), Error> {
+    fn update_super(&mut self, curr_kind: TokenKind) -> Result<()> {
         if self.tok_super < 0 {
             return Ok(());
         }
@@ -182,7 +182,7 @@ impl Parser {
     }
 
     /// Parse bencode int.
-    fn parse_int(&mut self, buf: &[u8], stop_char: u8) -> Result<i64, Error> {
+    fn parse_int(&mut self, buf: &[u8], stop_char: u8) -> Result<i64> {
         let mut negative = false;
         let mut pos = self.pos;
 
@@ -224,7 +224,7 @@ impl Parser {
     }
 
     /// Fills next token with bencode string.
-    fn parse_string(&mut self, buf: &[u8]) -> Result<(), Error> {
+    fn parse_string(&mut self, buf: &[u8]) -> Result<()> {
         let len = self.parse_int(buf, b':')?;
         if len < 0 {
             return Err(Error::Invalid {
@@ -247,7 +247,7 @@ impl Parser {
     }
 
     /// Adds a new token.
-    fn alloc_token(&mut self, token: Token) -> Result<(), Error> {
+    fn alloc_token(&mut self, token: Token) -> Result<()> {
         if self.tokens.len() >= self.token_limit {
             return Err(Error::NoMemory);
         }

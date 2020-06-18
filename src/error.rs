@@ -1,5 +1,7 @@
 use std::fmt;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Error {
     /// The string is not a full Bencode packet, more bytes expected
