@@ -68,10 +68,7 @@ impl Parser {
                     let start = self.pos;
                     self.parse_int(buf, b'e')?;
                     let token = Token::new(TokenKind::Int, start as i32, self.pos as i32);
-                    if let Err(e) = self.alloc_token(token) {
-                        self.pos = start;
-                        return Err(e);
-                    }
+                    self.alloc_token(token)?;
                     self.pos += 1;
                 }
                 b'l' => {
@@ -171,10 +168,10 @@ impl Parser {
             return Ok(());
         }
 
-        let t = &mut self.tokens[self.tok_super as usize];
-        t.children += 1;
-        if let TokenKind::Dict = t.kind {
-            if curr_kind != TokenKind::ByteStr && t.children % 2 != 0 {
+        let parent = &mut self.tokens[self.tok_super as usize];
+        parent.children += 1;
+        if let TokenKind::Dict = parent.kind {
+            if curr_kind != TokenKind::ByteStr && parent.children % 2 != 0 {
                 return Err(Error::Invalid {
                     reason: "Dictionary key must be a string",
                     pos: self.pos,
@@ -186,90 +183,70 @@ impl Parser {
 
     /// Parse bencode int.
     fn parse_int(&mut self, buf: &[u8], stop_char: u8) -> Result<i64, Error> {
-        if self.pos >= buf.len() {
+        let mut negative = false;
+        let mut pos = self.pos;
+
+        if let Some(b'-') = buf.get(pos) {
+            pos += 1;
+            negative = true;
+        }
+
+        if pos >= buf.len() {
             return Err(Error::Eof);
         }
 
-        let mut negative = false;
         let mut val = 0;
-
-        let start = self.pos;
-
-        if buf[self.pos] == b'-' {
-            self.pos += 1;
-            negative = true;
-            if self.pos == buf.len() {
-                self.pos = start;
-                return Err(Error::Eof);
+        while let Some(&c) = buf.get(pos) {
+            if let b'0'..=b'9' = c {
+                if val > i64::max_value() / 10 {
+                    return Err(Error::Overflow { pos: self.pos });
+                }
+                val *= 10;
+                let digit = (c - b'0') as i64;
+                if val > i64::max_value() - digit {
+                    return Err(Error::Overflow { pos: self.pos });
+                }
+                val += digit;
+                pos += 1;
+            } else if c == stop_char {
+                break;
+            } else {
+                return Err(Error::Unexpected { pos });
             }
         }
-
-        while self.pos < buf.len() {
-            match buf[self.pos] {
-                c @ b'0'..=b'9' => {
-                    if val > i64::max_value() / 10 {
-                        self.pos = start;
-                        return Err(Error::Overflow { pos: start });
-                    }
-                    val *= 10;
-                    let digit = (c - b'0') as i64;
-                    if val > i64::max_value() - digit {
-                        self.pos = start;
-                        return Err(Error::Overflow { pos: start });
-                    }
-                    val += digit;
-                    self.pos += 1
-                }
-                c => {
-                    if c == stop_char {
-                        break;
-                    } else {
-                        let pos = self.pos;
-                        self.pos = start;
-                        return Err(Error::Unexpected { pos });
-                    }
-                }
-            }
-        }
+        self.pos = pos;
 
         if negative {
             val *= -1;
         }
+
         Ok(val)
     }
 
     /// Fills next token with bencode string.
     fn parse_string(&mut self, buf: &[u8]) -> Result<(), Error> {
-        let start = self.pos;
-
         let len = self.parse_int(buf, b':')?;
-        self.pos += 1; // Skip the ':'
-
         if len < 0 {
-            self.pos = start;
             return Err(Error::Invalid {
                 reason: "String length must be positive",
                 pos: self.pos,
             });
         }
 
+        self.pos += 1; // Skip the ':'
+
         let len = len as usize;
         if self.pos + len > buf.len() {
-            self.pos = start;
             return Err(Error::Eof);
         }
 
         let token = Token::new(TokenKind::ByteStr, self.pos as i32, (self.pos + len) as i32);
-        if let Ok(_) = self.alloc_token(token) {
-            self.pos += len;
-            Ok(())
-        } else {
-            self.pos = start;
-            Err(Error::NoMemory)
-        }
+        self.alloc_token(token)?;
+        self.pos += len;
+        Ok(())
     }
 
-    /// Returns the next unused token from the slice.
+    /// Adds a new token.
     fn alloc_token(&mut self, token: Token) -> Result<(), Error> {
         if self.tokens.len() >= self.token_limit {
             return Err(Error::NoMemory);
