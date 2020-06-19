@@ -49,5 +49,4 @@ pub enum TokenKind {
     List,
     ByteStr,
     Int,
-    None,
 }

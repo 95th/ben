@@ -4,13 +4,13 @@ use std::fmt;
 #[derive(PartialEq)]
 pub struct Node<'a> {
     pub(crate) buf: &'a [u8],
-    pub(crate) tokens: &'a [Token],
-    pub(crate) idx: usize,
+    pub(crate) token: &'a Token,
+    pub(crate) rest: &'a [Token],
 }
 
 impl fmt::Debug for Node<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind() {
+        match self.token.kind {
             TokenKind::Int => write!(f, "{}", self.as_int().unwrap()),
             TokenKind::ByteStr => match self.as_ascii_str() {
                 Some(s) => write!(f, "\"{}\"", s),
@@ -18,12 +18,19 @@ impl fmt::Debug for Node<'_> {
             },
             TokenKind::List => self.as_list().unwrap().fmt(f),
             TokenKind::Dict => self.as_dict().unwrap().fmt(f),
-            TokenKind::None => write!(f, "Invalid token"),
         }
     }
 }
 
 impl<'a> Node<'a> {
+    pub(crate) fn new(buf: &'a [u8], tokens: &'a [Token]) -> Option<Self> {
+        if let [token, rest @ ..] = tokens {
+            Some(Node { buf, token, rest })
+        } else {
+            None
+        }
+    }
+
     /// Returns raw bytes of this node.
     ///
     /// This returns complete raw bytes for dict and list, but remove the headers
@@ -41,44 +48,29 @@ impl<'a> Node<'a> {
     /// assert_eq!(b"l1:a2:bce", node.as_raw_bytes());
     /// ```
     pub fn as_raw_bytes(&self) -> &'a [u8] {
-        debug_assert!(self.idx < self.tokens.len());
-        self.tokens
-            .get(self.idx)
-            .map(|t| t.range())
-            .and_then(|r| {
-                let buf = self.buf.get(r);
-                debug_assert!(buf.is_some());
-                buf
-            })
-            .unwrap_or(&[])
-    }
-
-    fn kind(&self) -> TokenKind {
-        debug_assert!(self.idx < self.tokens.len());
-        self.tokens
-            .get(self.idx)
-            .map(|t| t.kind)
-            .unwrap_or(TokenKind::None)
+        let buf = self.buf.get(self.token.range());
+        debug_assert!(buf.is_some());
+        buf.unwrap_or_default()
     }
 
     /// Returns true if this node is a list.
     pub fn is_list(&self) -> bool {
-        self.kind() == TokenKind::List
+        self.token.kind == TokenKind::List
     }
 
     /// Returns true if this node is a dictionary.
     pub fn is_dict(&self) -> bool {
-        self.kind() == TokenKind::Dict
+        self.token.kind == TokenKind::Dict
     }
 
     /// Returns true if this node is a string.
     pub fn is_bytes(&self) -> bool {
-        self.kind() == TokenKind::ByteStr
+        self.token.kind == TokenKind::ByteStr
     }
 
     /// Returns true if this node is a integer.
     pub fn is_int(&self) -> bool {
-        self.kind() == TokenKind::Int
+        self.token.kind == TokenKind::Int
     }
 
     /// Return this node as a `List` which provides further
@@ -101,8 +93,8 @@ impl<'a> Node<'a> {
         if self.is_list() {
             Some(List {
                 buf: self.buf,
-                tokens: self.tokens,
-                idx: self.idx,
+                token: self.token,
+                rest: self.rest,
             })
         } else {
             None
@@ -128,8 +120,8 @@ impl<'a> Node<'a> {
         if self.is_dict() {
             Some(Dict {
                 buf: self.buf,
-                tokens: self.tokens,
-                idx: self.idx,
+                token: self.token,
+                rest: self.rest,
             })
         } else {
             None
@@ -150,14 +142,12 @@ impl<'a> Node<'a> {
     /// assert_eq!(123, node.as_int().unwrap());
     /// ```
     pub fn as_int(&self) -> Option<i64> {
-        debug_assert!(self.idx < self.tokens.len());
-        let token = self.tokens.get(self.idx)?;
-        if token.kind != TokenKind::Int {
+        if self.token.kind != TokenKind::Int {
             return None;
         }
         let mut val = 0;
         let mut negative = false;
-        let bytes = self.buf.get(token.range());
+        let bytes = self.buf.get(self.token.range());
         debug_assert!(bytes.is_some());
         for &c in bytes? {
             if c == b'-' {
@@ -187,10 +177,8 @@ impl<'a> Node<'a> {
     /// assert_eq!(b"abc", node.as_bytes().unwrap());
     /// ```
     pub fn as_bytes(&self) -> Option<&'a [u8]> {
-        debug_assert!(self.idx < self.tokens.len());
-        let token = self.tokens.get(self.idx)?;
-        if let TokenKind::ByteStr = token.kind {
-            let bytes = self.buf.get(token.range());
+        if let TokenKind::ByteStr = self.token.kind {
+            let bytes = self.buf.get(self.token.range());
             debug_assert!(bytes.is_some());
             bytes
         } else {
@@ -252,8 +240,8 @@ impl<'a> Node<'a> {
 /// A bencode list
 pub struct List<'a> {
     buf: &'a [u8],
-    tokens: &'a [Token],
-    idx: usize,
+    token: &'a Token,
+    rest: &'a [Token],
 }
 
 impl fmt::Debug for List<'_> {
@@ -265,27 +253,20 @@ impl fmt::Debug for List<'_> {
 impl<'a> List<'a> {
     /// Gets an iterator over the entries of the list
     pub fn iter(&self) -> ListIter<'a> {
-        debug_assert!(self.idx < self.tokens.len());
         ListIter {
             buf: self.buf,
-            tokens: self.tokens,
-            total: self
-                .tokens
-                .get(self.idx)
-                .map(|t| t.children as usize)
-                .unwrap_or(0),
-            token_idx: self.idx + 1,
+            tokens: self.rest,
+            total: self.len(),
+            idx: 0,
             pos: 0,
         }
     }
 
     /// Returns the `Node` at the given index.
     pub fn get(&self, i: usize) -> Option<Node<'a>> {
-        Some(Node {
-            buf: self.buf,
-            idx: self.find_idx(i)?,
-            tokens: self.tokens,
-        })
+        let idx = self.find_idx(i)?;
+        let tokens = self.rest.get(idx..)?;
+        Node::new(self.buf, tokens)
     }
 
     /// Returns the `Dict` at the given index.
@@ -320,10 +301,7 @@ impl<'a> List<'a> {
 
     /// Returns the number of items
     pub fn len(&self) -> usize {
-        self.tokens
-            .get(self.idx)
-            .map(|t| t.children as usize)
-            .unwrap_or(0)
+        self.token.children as usize
     }
 
     /// Returns true if the list is empty
@@ -331,16 +309,17 @@ impl<'a> List<'a> {
         self.len() == 0
     }
 
+    /// Find the index of i'th element in the tokens array
     fn find_idx(&self, i: usize) -> Option<usize> {
-        let token = self.tokens.get(self.idx)?;
-        if i >= token.children as usize {
+        if i >= self.len() {
             return None;
         }
-        let mut idx = self.idx + 1;
+        let mut idx = 0;
         let mut item = 0;
 
         while item < i {
-            idx += self.tokens[idx].next as usize;
+            debug_assert!(idx < self.rest.len());
+            idx += self.rest.get(idx)?.next as usize;
             item += 1;
         }
 
@@ -352,7 +331,7 @@ pub struct ListIter<'a> {
     buf: &'a [u8],
     tokens: &'a [Token],
     total: usize,
-    token_idx: usize,
+    idx: usize,
     pos: usize,
 }
 
@@ -364,24 +343,22 @@ impl<'a> Iterator for ListIter<'a> {
             return None;
         }
 
-        let idx = self.token_idx;
-        debug_assert!(self.token_idx < self.tokens.len());
-        self.token_idx += self.tokens.get(self.token_idx)?.next as usize;
+        debug_assert!(self.idx < self.tokens.len());
+        let tokens = self.tokens.get(self.idx..)?;
+        let node = Node::new(self.buf, tokens)?;
+
+        self.idx += node.token.next as usize;
         self.pos += 1;
 
-        Some(Node {
-            buf: self.buf,
-            idx,
-            tokens: self.tokens,
-        })
+        Some(node)
     }
 }
 
 /// A bencode dictionary
 pub struct Dict<'a> {
     buf: &'a [u8],
-    tokens: &'a [Token],
-    idx: usize,
+    token: &'a Token,
+    rest: &'a [Token],
 }
 
 impl fmt::Debug for Dict<'_> {
@@ -393,16 +370,11 @@ impl fmt::Debug for Dict<'_> {
 impl<'a> Dict<'a> {
     /// Gets an iterator over the entries of the dictionary.
     pub fn iter(&self) -> DictIter<'a> {
-        debug_assert!(self.idx < self.tokens.len());
         DictIter {
             buf: self.buf,
-            tokens: self.tokens,
-            total: self
-                .tokens
-                .get(self.idx)
-                .map(|t| t.children as usize)
-                .unwrap_or(0),
-            token_idx: self.idx + 1,
+            tokens: self.rest,
+            total: self.len(),
+            idx: 0,
             pos: 0,
         }
     }
@@ -446,13 +418,8 @@ impl<'a> Dict<'a> {
 
     /// Returns the number of entries
     pub fn len(&self) -> usize {
-        self.tokens
-            .get(self.idx)
-            .map(|t| {
-                debug_assert_eq!(t.children % 2, 0);
-                t.children as usize / 2
-            })
-            .unwrap_or(0)
+        debug_assert_eq!(self.token.children % 2, 0);
+        self.token.children as usize / 2
     }
 
     /// Returns true if the dictionary is empty
@@ -465,7 +432,7 @@ pub struct DictIter<'a> {
     buf: &'a [u8],
     tokens: &'a [Token],
     total: usize,
-    token_idx: usize,
+    idx: usize,
     pos: usize,
 }
 
@@ -477,30 +444,21 @@ impl<'a> Iterator for DictIter<'a> {
             return None;
         }
 
-        debug_assert!(self.token_idx < self.tokens.len());
-        let key_idx = self.token_idx;
+        debug_assert!(self.idx < self.tokens.len());
+        let tokens = self.tokens.get(self.idx..)?;
+        let key = Node::new(self.buf, tokens)?;
 
-        debug_assert_eq!(TokenKind::ByteStr, self.tokens[key_idx].kind);
-        self.token_idx += self.tokens.get(self.token_idx)?.next as usize;
+        debug_assert_eq!(TokenKind::ByteStr, key.token.kind);
+        self.idx += key.token.next as usize;
 
-        debug_assert!(self.token_idx < self.tokens.len());
-        let val_idx = self.token_idx;
-        self.token_idx += self.tokens.get(self.token_idx)?.next as usize;
+        debug_assert!(self.idx < self.tokens.len());
+        let tokens = self.tokens.get(self.idx..)?;
+        let val = Node::new(self.buf, tokens)?;
 
-        self.pos += 2;
+        self.idx += val.token.next as usize;
+        self.pos += 1;
 
-        Some((
-            Node {
-                idx: key_idx,
-                buf: self.buf,
-                tokens: self.tokens,
-            },
-            Node {
-                idx: val_idx,
-                buf: self.buf,
-                tokens: self.tokens,
-            },
-        ))
+        Some((key, val))
     }
 }
 

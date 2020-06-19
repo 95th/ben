@@ -148,11 +148,7 @@ impl Parser {
                 }
             }
         }
-        let node = Node {
-            buf,
-            tokens: &self.tokens,
-            idx: 0,
-        };
+        let node = Node::new(buf, &self.tokens).ok_or_else(|| Error::Eof)?;
         Ok((node, self.pos))
     }
 
