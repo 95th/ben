@@ -2,6 +2,7 @@ use crate::token::{Token, TokenKind};
 use std::fmt;
 
 #[derive(PartialEq)]
+#[repr(C)]
 pub struct Node<'a> {
     pub(crate) buf: &'a [u8],
     pub(crate) token: &'a Token,
@@ -85,13 +86,65 @@ impl<'a> Node<'a> {
     /// let bytes = b"l1:a2:bce";
     /// let parser = &mut Parser::new();
     /// let node = parser.parse(bytes).unwrap();
+    /// let list = node.to_list().unwrap();
+    /// assert_eq!(b"a", list.get_bytes(0).unwrap());
+    /// assert_eq!(b"bc", list.get_bytes(1).unwrap());
+    /// ```
+    pub fn to_list(self) -> Option<List<'a>> {
+        if self.is_list() {
+            Some(List {
+                buf: self.buf,
+                token: self.token,
+                rest: self.rest,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Return this node as a `List` which provides further
+    /// list operations such as `get`, `iter` etc.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    /// ```
+    /// use ben::{Node, Parser};
+    ///
+    /// let bytes = b"l1:a2:bce";
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(bytes).unwrap();
     /// let list = node.as_list().unwrap();
     /// assert_eq!(b"a", list.get_bytes(0).unwrap());
     /// assert_eq!(b"bc", list.get_bytes(1).unwrap());
     /// ```
-    pub fn as_list(&self) -> Option<List<'a>> {
+    pub fn as_list(&self) -> Option<&List<'a>> {
         if self.is_list() {
-            Some(List {
+            let list = unsafe { std::mem::transmute(self) };
+            Some(list)
+        } else {
+            None
+        }
+    }
+
+    /// Return this node as a `Dict` which provides further
+    /// dictionary operations such as `get`, `iter` etc.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    /// ```
+    /// use ben::{Node, Parser};
+    ///
+    /// let bytes = b"d1:a2:bce";
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(bytes).unwrap();
+    /// let dict = node.to_dict().unwrap();
+    /// assert_eq!(b"bc", dict.get_bytes(b"a").unwrap());
+    /// ```
+    pub fn to_dict(self) -> Option<Dict<'a>> {
+        if self.is_dict() {
+            Some(Dict {
                 buf: self.buf,
                 token: self.token,
                 rest: self.rest,
@@ -116,13 +169,10 @@ impl<'a> Node<'a> {
     /// let dict = node.as_dict().unwrap();
     /// assert_eq!(b"bc", dict.get_bytes(b"a").unwrap());
     /// ```
-    pub fn as_dict(&self) -> Option<Dict<'a>> {
+    pub fn as_dict(&self) -> Option<&Dict<'a>> {
         if self.is_dict() {
-            Some(Dict {
-                buf: self.buf,
-                token: self.token,
-                rest: self.rest,
-            })
+            let dict = unsafe { std::mem::transmute(self) };
+            Some(dict)
         } else {
             None
         }
@@ -238,6 +288,7 @@ impl<'a> Node<'a> {
 }
 
 /// A bencode list
+#[repr(C)]
 pub struct List<'a> {
     buf: &'a [u8],
     token: &'a Token,
@@ -271,12 +322,12 @@ impl<'a> List<'a> {
 
     /// Returns the `Dict` at the given index.
     pub fn get_dict(&self, i: usize) -> Option<Dict<'a>> {
-        self.get(i)?.as_dict()
+        self.get(i)?.to_dict()
     }
 
     /// Returns the `List` at the given index.
     pub fn get_list(&self, i: usize) -> Option<List<'a>> {
-        self.get(i)?.as_list()
+        self.get(i)?.to_list()
     }
 
     /// Returns the byte slice at the given index.
@@ -355,6 +406,7 @@ impl<'a> Iterator for ListIter<'a> {
 }
 
 /// A bencode dictionary
+#[repr(C)]
 pub struct Dict<'a> {
     buf: &'a [u8],
     token: &'a Token,
@@ -388,12 +440,12 @@ impl<'a> Dict<'a> {
 
     /// Returns the `Dict` for the given key.
     pub fn get_dict(&self, key: &[u8]) -> Option<Dict<'a>> {
-        self.get(key)?.as_dict()
+        self.get(key)?.to_dict()
     }
 
     /// Returns the `List` for the given key.
     pub fn get_list(&self, key: &[u8]) -> Option<List<'a>> {
-        self.get(key)?.as_list()
+        self.get(key)?.to_list()
     }
 
     /// Returns the byte slice for the given key.
