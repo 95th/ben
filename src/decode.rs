@@ -294,6 +294,19 @@ impl<'a> List<'a> {
         self.get(i)?.as_int()
     }
 
+    /// Returns the number of items
+    pub fn len(&self) -> usize {
+        self.tokens
+            .get(self.idx)
+            .map(|t| t.children as usize)
+            .unwrap_or(0)
+    }
+
+    /// Returns true if the list is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     fn find_idx(&self, i: usize) -> Option<usize> {
         let token = self.tokens.get(self.idx)?;
         if i >= token.children as usize {
@@ -407,6 +420,22 @@ impl<'a> Dict<'a> {
     /// Returns the `i64` for the given key.
     pub fn get_int(&self, key: &[u8]) -> Option<i64> {
         self.get(key)?.as_int()
+    }
+
+    /// Returns the number of entries
+    pub fn len(&self) -> usize {
+        self.tokens
+            .get(self.idx)
+            .map(|t| {
+                debug_assert_eq!(t.children % 2, 0);
+                t.children as usize / 2
+            })
+            .unwrap_or(0)
+    }
+
+    /// Returns true if the dictionary is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -653,5 +682,56 @@ mod tests {
         assert!(n.as_bytes().is_some());
         assert!(n.as_ascii_str().is_some());
         assert_eq!("\"abc\"", format!("{:?}", n));
+    }
+
+    #[test]
+    fn empty_dict_len() {
+        let s = b"de";
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
+        assert!(node.as_dict().unwrap().is_empty());
+    }
+
+    #[test]
+    fn non_empty_dict_len() {
+        let s = b"d1:a1:be";
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
+        assert!(!node.as_dict().unwrap().is_empty());
+        assert_eq!(node.as_dict().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn non_empty_dict_nested_len() {
+        let s = b"d1:al1:ad1:al1:aee1:bee";
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
+        assert!(!node.as_dict().unwrap().is_empty());
+        assert_eq!(node.as_dict().unwrap().len(), 1);
+    }
+    #[test]
+    fn empty_list_len() {
+        let s = b"le";
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
+        assert!(node.as_list().unwrap().is_empty());
+    }
+
+    #[test]
+    fn non_empty_list_len() {
+        let s = b"l1:a1:be";
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
+        assert!(!node.as_list().unwrap().is_empty());
+        assert_eq!(node.as_list().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn non_empty_list_nested_len() {
+        let s = b"l1:ad1:al1:aee1:be";
+        let parser = &mut Parser::new();
+        let node = parser.parse(s).unwrap();
+        assert!(!node.as_list().unwrap().is_empty());
+        assert_eq!(node.as_list().unwrap().len(), 3);
     }
 }

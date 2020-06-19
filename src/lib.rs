@@ -12,4 +12,3 @@ pub use decode::Node;
 pub use encode::{Encode, Encoder};
 pub use error::{Error, Result};
 pub use parse::Parser;
-pub use token::Token;
