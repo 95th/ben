@@ -36,8 +36,8 @@ impl Token {
     /// # Panics
     /// If the token is not valid
     pub fn range(&self) -> Range<usize> {
-        assert!(self.start >= 0);
-        assert!(self.end >= self.start);
+        debug_assert!(self.start >= 0);
+        debug_assert!(self.end >= self.start);
 
         self.start as usize..self.end as usize
     }
@@ -49,4 +49,5 @@ pub enum TokenKind {
     List,
     ByteStr,
     Int,
+    None,
 }

@@ -18,6 +18,7 @@ impl fmt::Debug for Node<'_> {
             },
             TokenKind::List => self.as_list().unwrap().fmt(f),
             TokenKind::Dict => self.as_dict().unwrap().fmt(f),
+            TokenKind::None => write!(f, "Invalid token"),
         }
     }
 }
@@ -32,19 +33,32 @@ impl<'a> Node<'a> {
     ///
     /// Basic usage:
     /// ```
-    ///     use ben::{Node, Parser};
+    /// use ben::{Node, Parser};
     ///
-    ///     let bytes = b"l1:a2:bce";
-    ///    let parser = &mut Parser::new();
-    ///    let node = parser.parse(bytes).unwrap();
-    ///     assert_eq!(b"l1:a2:bce", node.as_raw_bytes());
+    /// let bytes = b"l1:a2:bce";
+    /// let parser = &mut Parser::new();
+    /// let node = parser.parse(bytes).unwrap();
+    /// assert_eq!(b"l1:a2:bce", node.as_raw_bytes());
     /// ```
     pub fn as_raw_bytes(&self) -> &'a [u8] {
-        &self.buf[self.tokens[self.idx].range()]
+        debug_assert!(self.idx < self.tokens.len());
+        self.tokens
+            .get(self.idx)
+            .map(|t| t.range())
+            .and_then(|r| {
+                let buf = self.buf.get(r);
+                debug_assert!(buf.is_some());
+                buf
+            })
+            .unwrap_or(&[])
     }
 
     fn kind(&self) -> TokenKind {
-        self.tokens[self.idx].kind
+        debug_assert!(self.idx < self.tokens.len());
+        self.tokens
+            .get(self.idx)
+            .map(|t| t.kind)
+            .unwrap_or(TokenKind::None)
     }
 
     /// Returns true if this node is a list.
@@ -91,7 +105,7 @@ impl<'a> Node<'a> {
                 idx: self.idx,
             })
         } else {
-            return None;
+            None
         }
     }
 
@@ -114,11 +128,11 @@ impl<'a> Node<'a> {
         if self.is_dict() {
             Some(Dict {
                 buf: self.buf,
-                tokens: &self.tokens,
+                tokens: self.tokens,
                 idx: self.idx,
             })
         } else {
-            return None;
+            None
         }
     }
 
@@ -136,13 +150,16 @@ impl<'a> Node<'a> {
     /// assert_eq!(123, node.as_int().unwrap());
     /// ```
     pub fn as_int(&self) -> Option<i64> {
-        let token = &self.tokens[self.idx];
+        debug_assert!(self.idx < self.tokens.len());
+        let token = self.tokens.get(self.idx)?;
         if token.kind != TokenKind::Int {
             return None;
         }
         let mut val = 0;
         let mut negative = false;
-        for &c in &self.buf[token.range()] {
+        let bytes = self.buf.get(token.range());
+        debug_assert!(bytes.is_some());
+        for &c in bytes? {
             if c == b'-' {
                 negative = true;
             } else {
@@ -170,10 +187,12 @@ impl<'a> Node<'a> {
     /// assert_eq!(b"abc", node.as_bytes().unwrap());
     /// ```
     pub fn as_bytes(&self) -> Option<&'a [u8]> {
-        let token = &self.tokens[self.idx];
+        debug_assert!(self.idx < self.tokens.len());
+        let token = self.tokens.get(self.idx)?;
         if let TokenKind::ByteStr = token.kind {
-            let bytes = &self.buf[token.range()];
-            Some(bytes)
+            let bytes = self.buf.get(token.range());
+            debug_assert!(bytes.is_some());
+            bytes
         } else {
             None
         }
@@ -246,10 +265,15 @@ impl fmt::Debug for List<'_> {
 impl<'a> List<'a> {
     /// Gets an iterator over the entries of the list
     pub fn iter(&self) -> ListIter<'a> {
+        debug_assert!(self.idx < self.tokens.len());
         ListIter {
             buf: self.buf,
             tokens: self.tokens,
-            total: self.tokens[self.idx].children as usize,
+            total: self
+                .tokens
+                .get(self.idx)
+                .map(|t| t.children as usize)
+                .unwrap_or(0),
             token_idx: self.idx + 1,
             pos: 0,
         }
@@ -341,7 +365,8 @@ impl<'a> Iterator for ListIter<'a> {
         }
 
         let idx = self.token_idx;
-        self.token_idx += self.tokens[self.token_idx].next as usize;
+        debug_assert!(self.token_idx < self.tokens.len());
+        self.token_idx += self.tokens.get(self.token_idx)?.next as usize;
         self.pos += 1;
 
         Some(Node {
@@ -368,10 +393,15 @@ impl fmt::Debug for Dict<'_> {
 impl<'a> Dict<'a> {
     /// Gets an iterator over the entries of the dictionary.
     pub fn iter(&self) -> DictIter<'a> {
+        debug_assert!(self.idx < self.tokens.len());
         DictIter {
             buf: self.buf,
             tokens: self.tokens,
-            total: self.tokens[self.idx].children as usize,
+            total: self
+                .tokens
+                .get(self.idx)
+                .map(|t| t.children as usize)
+                .unwrap_or(0),
             token_idx: self.idx + 1,
             pos: 0,
         }
@@ -380,26 +410,18 @@ impl<'a> Dict<'a> {
     /// Returns the `Node` for the given key.
     pub fn get(&self, key: &[u8]) -> Option<Node<'a>> {
         self.iter()
-            .find(|(k, _)| k.as_raw_bytes() == key)
+            .find(|(k, _)| k.as_bytes() == Some(key))
             .map(|(_, v)| v)
     }
 
     /// Returns the `Dict` for the given key.
     pub fn get_dict(&self, key: &[u8]) -> Option<Dict<'a>> {
-        Some(Dict {
-            buf: self.buf,
-            idx: self.get(key)?.as_dict()?.idx,
-            tokens: self.tokens,
-        })
+        self.get(key)?.as_dict()
     }
 
     /// Returns the `List` for the given key.
     pub fn get_list(&self, key: &[u8]) -> Option<List<'a>> {
-        Some(List {
-            buf: self.buf,
-            idx: self.get(key)?.as_list()?.idx,
-            tokens: self.tokens,
-        })
+        self.get(key)?.as_list()
     }
 
     /// Returns the byte slice for the given key.
