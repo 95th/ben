@@ -24,10 +24,13 @@ impl Default for Parser {
 }
 
 impl Parser {
+    /// Create a new Bencode parser
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Create a new Bencode parser with limit on number of tokens that
+    /// can be created during parsing.
     pub fn with_token_limit(token_limit: usize) -> Self {
         Self {
             token_limit,
@@ -35,7 +38,7 @@ impl Parser {
         }
     }
 
-    /// It parses a bencoded bytes and returns a `Node` object
+    /// Parse a bencoded slice and returns a `Node` object
     pub fn parse<'a>(&'a mut self, buf: &'a [u8]) -> Result<Node<'a>> {
         let (node, len) = self.parse_prefix(buf)?;
         if len == buf.len() {
@@ -48,7 +51,7 @@ impl Parser {
         }
     }
 
-    /// It parses one object from the beginning of given bytes and return the parsed `Node` and
+    /// Parse one object from the beginning of given slice and return the parsed `Node` and
     /// number of bytes processed.
     ///
     /// It's useful when there is trailing data after the bencoded bytes.

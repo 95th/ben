@@ -90,6 +90,11 @@ impl_arr![
     28, 29, 30
 ];
 
+/// Add bytes lazily to given encoder.
+/// 
+/// # Panic
+/// Drop will panic if the expected number of bytes
+/// is not equal to actually added bytes.
 pub struct AddBytes<'a, T: BufMut> {
     enc: &'a mut T,
     len: usize,
@@ -97,6 +102,7 @@ pub struct AddBytes<'a, T: BufMut> {
 }
 
 impl<'a, T: BufMut> AddBytes<'a, T> {
+    /// Add given byte slice.
     pub fn add(&mut self, buf: &[u8]) {
         self.written += buf.len();
         self.enc.put_slice(buf);
@@ -180,6 +186,7 @@ pub struct List<'a, T: BufMut> {
 }
 
 impl<T: BufMut> List<'_, T> {
+    /// create a new list
     pub fn new(enc: &mut T) -> List<'_, T> {
         enc.put_u8(b'l');
         List { enc }
@@ -211,11 +218,15 @@ impl<T: BufMut> Drop for List<'_, T> {
 }
 
 /// Bencode Dictionary representation.
+///
+/// Note: This will not enforce order or uniqueness of keys. 
+/// These invariants have to be maintained by the caller.
 pub struct Dict<'a, T: BufMut> {
     enc: &'a mut T,
 }
 
 impl<T: BufMut> Dict<'_, T> {
+    /// Create a new dict
     pub fn new(enc: &mut T) -> Dict<'_, T> {
         enc.put_u8(b'd');
         Dict { enc }
