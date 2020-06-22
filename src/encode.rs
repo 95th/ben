@@ -145,6 +145,7 @@ pub trait Encoder {
 }
 
 impl Encoder for Vec<u8> {
+    #[inline]
     fn add_int(&mut self, value: i64) {
         self.push(b'i');
         let mut buf = Buffer::new();
@@ -152,6 +153,7 @@ impl Encoder for Vec<u8> {
         self.push(b'e');
     }
 
+    #[inline]
     fn add_bytes(&mut self, value: &[u8]) {
         let mut buf = Buffer::new();
         self.extend(buf.format(value.len()).as_bytes());
@@ -159,6 +161,7 @@ impl Encoder for Vec<u8> {
         self.extend(value);
     }
 
+    #[inline]
     fn add_n_bytes(&mut self, len: usize) -> AddBytes<'_> {
         let mut buf = Buffer::new();
         self.extend(buf.format(len).as_bytes());
@@ -170,18 +173,22 @@ impl Encoder for Vec<u8> {
         }
     }
 
+    #[inline]
     fn add_str(&mut self, value: &str) {
         self.add_bytes(value.as_bytes());
     }
 
+    #[inline]
     fn add_list(&mut self) -> List<'_> {
         List::new(self)
     }
 
+    #[inline]
     fn add_dict(&mut self) -> Dict<'_> {
         Dict::new(self)
     }
 
+    #[inline]
     fn add_ordered_dict(&mut self) -> OrderedDict<'_, '_> {
         OrderedDict::new(self)
     }
