@@ -233,40 +233,74 @@ impl Drop for List<'_> {
 ///
 /// Note: This will not enforce order or uniqueness of keys.
 /// These invariants have to be maintained by the caller.
+///
+/// If the invariants don't meet in debug mode, the add calls will
+/// panic.
 pub struct Dict<'a> {
     enc: &'a mut Vec<u8>,
+
+    #[cfg(debug_assertions)]
+    last_key: Option<Vec<u8>>,
 }
 
 impl Dict<'_> {
     /// Create a new dict
     pub fn new(enc: &mut Vec<u8>) -> Dict<'_> {
         enc.push(b'd');
-        Dict { enc }
+        Dict {
+            enc,
+            #[cfg(debug_assertions)]
+            last_key: None,
+        }
     }
 
     /// Create a new `List` for given key inside this dictionary.
     pub fn add_list(&mut self, key: &str) -> List<'_> {
-        self.enc.add_str(key);
+        self.add_key(key);
         self.enc.add_list()
     }
 
     /// Create a new `Dict` for given key inside this dictionary.
     pub fn add_dict(&mut self, key: &str) -> Dict<'_> {
-        self.enc.add_str(key);
+        self.add_key(key);
         self.enc.add_dict()
     }
 
     /// Create a new `OrderedDict` inside this dictionary.
     pub fn add_ordered_dict(&mut self, key: &str) -> OrderedDict<'_, '_> {
-        self.enc.add_str(key);
+        self.add_key(key);
         OrderedDict::new(self.enc)
     }
 
     /// `Encode` the value for given key inside this dictionary.
     pub fn add<E: Encode>(&mut self, key: &str, value: E) {
-        self.enc.add_str(key);
+        self.add_key(key);
         value.encode(self.enc);
     }
+
+    fn add_key(&mut self, key: &str) {
+        self.assert_key_ordering(key);
+        self.enc.add_str(key);
+    }
+
+    #[cfg(debug_assertions)]
+    fn assert_key_ordering(&mut self, key: &str) {
+        if let Some(last_key) = &mut self.last_key {
+            if key.as_bytes() < &last_key[..] {
+                panic!("Keys must be sorted");
+            }
+            if key.as_bytes() == &last_key[..] {
+                panic!("Keys must be unique");
+            }
+            last_key.clear();
+            last_key.extend(key.as_bytes());
+        } else {
+            self.last_key = Some(key.as_bytes().to_vec());
+        }
+    }
+
+    #[cfg(not(debug_assertions))]
+    fn assert_key_ordering(&mut self, _key: &str) {}
 
     /// Finish building this dictionary.
     pub fn finish(self) {}
@@ -396,6 +430,7 @@ mod tests {
         drop(dict);
         assert_eq!(&b"d1:ai100e1:b5:World1:cd1:b1:xe1:dl1:aee"[..], &e[..]);
     }
+
     #[test]
     fn encode_dict_ordered_duplicate_keys() {
         let mut e = vec![];
@@ -481,5 +516,38 @@ mod tests {
         let mut e = vec![];
         let mut bytes = e.add_n_bytes(4);
         bytes.add(&[0; 100]);
+    }
+
+    #[cfg(debug_assertions)]
+    mod debug {
+        use super::*;
+
+        #[test]
+        #[should_panic(expected = "Keys must be sorted")]
+        fn encode_dict_unordered() {
+            let mut e = vec![];
+            let mut dict = e.add_dict();
+            dict.add("b", "Hello");
+            dict.add("a", "World");
+        }
+
+        #[test]
+        #[should_panic(expected = "Keys must be unique")]
+        fn encode_dict_duplicate() {
+            let mut e = vec![];
+            let mut dict = e.add_dict();
+            dict.add("a", "Hello");
+            dict.add("a", "World");
+        }
+
+        #[test]
+        fn encode_dict_sorted() {
+            let mut e = vec![];
+            let mut dict = e.add_dict();
+            dict.add("a", "Hello");
+            dict.add("b", "World");
+            dict.finish();
+            assert_eq!(b"d1:a5:Hello1:b5:Worlde", &e[..]);
+        }
     }
 }
