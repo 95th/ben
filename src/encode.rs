@@ -1,4 +1,5 @@
 use itoa::Buffer;
+use std::collections::BTreeMap;
 
 /// A trait for objects that can be bencoded.
 ///
@@ -138,6 +139,9 @@ pub trait Encoder {
 
     /// Create a new `Dict` in this `Encoder`.
     fn add_dict(&mut self) -> Dict<'_>;
+
+    /// Create a new `OrderedDict` in this `Encoder`.
+    fn add_ordered_dict(&mut self) -> OrderedDict<'_, '_>;
 }
 
 impl Encoder for Vec<u8> {
@@ -177,6 +181,10 @@ impl Encoder for Vec<u8> {
     fn add_dict(&mut self) -> Dict<'_> {
         Dict::new(self)
     }
+
+    fn add_ordered_dict(&mut self) -> OrderedDict<'_, '_> {
+        OrderedDict::new(self)
+    }
 }
 
 /// Bencode List representation.
@@ -204,6 +212,11 @@ impl List<'_> {
     /// Create a new `Dict` in this list.
     pub fn add_dict(&mut self) -> Dict<'_> {
         self.enc.add_dict()
+    }
+
+    /// Create a new `OrderedDict` in this list.
+    pub fn add_ordered_dict(&mut self) -> OrderedDict<'_, '_> {
+        OrderedDict::new(self.enc)
     }
 
     /// Finish building this list.
@@ -243,18 +256,83 @@ impl Dict<'_> {
         self.enc.add_dict()
     }
 
+    /// Create a new `OrderedDict` inside this dictionary.
+    pub fn add_ordered_dict(&mut self, key: &str) -> OrderedDict<'_, '_> {
+        self.enc.add_str(key);
+        OrderedDict::new(self.enc)
+    }
+
     /// `Encode` the value for given key inside this dictionary.
     pub fn add<E: Encode>(&mut self, key: &str, value: E) {
         self.enc.add_str(key);
         value.encode(self.enc);
     }
 
-    /// Finish building this dict.
+    /// Finish building this dictionary.
     pub fn finish(self) {}
 }
 
 impl Drop for Dict<'_> {
     fn drop(&mut self) {
+        self.enc.push(b'e');
+    }
+}
+
+/// Bencode Ordered Dictionary representation.
+///
+/// This will maintain keys to be unique and sorted.
+pub struct OrderedDict<'a, 'k> {
+    enc: &'a mut Vec<u8>,
+    entries: BTreeMap<&'k [u8], Vec<u8>>,
+}
+
+impl<'a, 'k> OrderedDict<'a, 'k> {
+    /// Create a new dict
+    pub fn new(enc: &'a mut Vec<u8>) -> OrderedDict<'a, 'k> {
+        OrderedDict {
+            enc,
+            entries: BTreeMap::new(),
+        }
+    }
+
+    /// Create a new `List` for given key inside this dictionary.
+    pub fn add_list(&mut self, key: &'k str) -> List<'_> {
+        self.add_key(key).add_list()
+    }
+
+    /// Create a new `Dict` for given key inside this dictionary.
+    pub fn add_dict(&mut self, key: &'k str) -> Dict<'_> {
+        self.add_key(key).add_dict()
+    }
+
+    /// Create a new `OrderedDict` inside this dictionary.
+    pub fn add_ordered_dict(&mut self, key: &'k str) -> OrderedDict<'_, '_> {
+        self.add_key(key).add_ordered_dict()
+    }
+
+    /// `Encode` the value for given key inside this dictionary.
+    pub fn add<E: Encode>(&mut self, key: &'k str, value: E) {
+        let enc = self.add_key(key);
+        value.encode(enc);
+    }
+
+    fn add_key(&mut self, key: &'k str) -> &mut Vec<u8> {
+        let buf = self.entries.entry(key.as_bytes()).or_insert_with(Vec::new);
+        buf.clear();
+        buf
+    }
+
+    /// Finish building this dictionary.
+    pub fn finish(self) {}
+}
+
+impl Drop for OrderedDict<'_, '_> {
+    fn drop(&mut self) {
+        self.enc.push(b'd');
+        for (k, v) in &self.entries {
+            self.enc.add_bytes(k);
+            self.enc.extend(v);
+        }
         self.enc.push(b'e');
     }
 }
@@ -293,6 +371,40 @@ mod tests {
         dict.add("Hello", "World");
         drop(dict);
         assert_eq!(b"d5:Hello5:Worlde", &e[..]);
+    }
+
+    #[test]
+    fn encode_dict_ordered() {
+        let mut e = vec![];
+        let mut dict = e.add_ordered_dict();
+        dict.add("b", "World");
+        dict.add("a", 100);
+        dict.add_list("d").add("a");
+        dict.add_dict("c").add("b", "x");
+        dict.finish();
+        assert_eq!(&b"d1:ai100e1:b5:World1:cd1:b1:xe1:dl1:aee"[..], &e[..]);
+    }
+
+    #[test]
+    fn encode_dict_ordered_drop() {
+        let mut e = vec![];
+        let mut dict = e.add_ordered_dict();
+        dict.add("b", "World");
+        dict.add("a", 100);
+        dict.add_list("d").add("a");
+        dict.add_dict("c").add("b", "x");
+        drop(dict);
+        assert_eq!(&b"d1:ai100e1:b5:World1:cd1:b1:xe1:dl1:aee"[..], &e[..]);
+    }
+    #[test]
+    fn encode_dict_ordered_duplicate_keys() {
+        let mut e = vec![];
+        let mut dict = e.add_ordered_dict();
+        dict.add("b", "World");
+        dict.add("a", "Foo");
+        dict.add("a", "Hello");
+        dict.finish();
+        assert_eq!(&b"d1:a5:Hello1:b5:Worlde"[..], &e[..]);
     }
 
     #[test]
